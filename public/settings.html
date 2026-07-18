@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日報ボット - 設定</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="header-inner">
+        <h1 class="logo">日報ボット</h1>
+        <span class="badge">設定</span>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Writing Style -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">書き方スタイル</h2>
+          <p class="section-desc">日報のベースとなるトーンを選んでください</p>
+        </div>
+
+        <div class="preset-grid">
+          <label class="preset-card">
+            <input type="radio" name="preset" value="concise">
+            <div class="preset-body">
+              <span class="preset-icon">⚡</span>
+              <strong class="preset-name">簡潔・箇条書き</strong>
+              <span class="preset-desc">要点だけをシンプルに伝える</span>
+              <div class="preset-sample">
+                ・認証APIリファクタ<br>
+                ・Issue #423 修正
+              </div>
+            </div>
+          </label>
+
+          <label class="preset-card">
+            <input type="radio" name="preset" value="detailed">
+            <div class="preset-body">
+              <span class="preset-icon">📝</span>
+              <strong class="preset-name">丁寧・詳細</strong>
+              <span class="preset-desc">背景や経緯も含めて書く</span>
+              <div class="preset-sample">
+                ・認証APIのリファクタリングを実施しました。既存のミドルウェア構成を見直し…
+              </div>
+            </div>
+          </label>
+
+          <label class="preset-card">
+            <input type="radio" name="preset" value="reflective">
+            <div class="preset-body">
+              <span class="preset-icon">🎯</span>
+              <strong class="preset-name">結果・次アクション</strong>
+              <span class="preset-desc">記録にある結果や次の行動を明確にする</span>
+              <div class="preset-sample">
+                ・認証APIリファクタ<br>
+                → レビュー依頼まで実施
+              </div>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <!-- Custom Instructions -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">カスタム指示</h2>
+          <p class="section-desc">AIへの追加の指示を自由に書けます</p>
+        </div>
+        <textarea id="customPrompt" class="textarea"
+          placeholder="例:&#10;・技術用語は英語のまま使って&#10;・タスク名が長い場合は要約して&#10;・入力にない成果は追加しないで"></textarea>
+      </section>
+
+      <!-- Example Reports -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">やったこと・やることのお手本</h2>
+          <p class="section-desc">理想の書き方を1〜3個登録すると、AI生成部分の粒度を再現します</p>
+        </div>
+        <div id="examples" class="examples-list"></div>
+        <button type="button" class="btn btn-outline" id="addExampleBtn">
+          <span class="btn-icon">+</span> お手本を追加
+        </button>
+      </section>
+
+      <!-- Preview -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">プレビュー</h2>
+          <p class="section-desc">今の設定でAIが日報を書くとこうなります</p>
+        </div>
+        <button type="button" class="btn btn-outline" id="previewBtn">
+          プレビューを生成
+        </button>
+        <div id="previewArea" class="preview-area hidden">
+          <div id="previewContent"></div>
+        </div>
+      </section>
+
+      <hr class="divider">
+
+      <!-- Connections -->
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">連携設定</h2>
+          <p class="section-desc">データ取得元のサービスを接続します</p>
+        </div>
+
+        <div class="conn-card">
+          <div class="conn-left">
+            <span class="conn-icon">⏱</span>
+            <div>
+              <strong>Toggl Track</strong>
+              <span class="conn-status" id="togglStatus"></span>
+            </div>
+          </div>
+          <div class="conn-body">
+            <div class="input-group">
+              <input type="password" id="togglToken" class="input" placeholder="API トークン">
+              <button type="button" class="btn-icon-only" id="togglToggle" title="表示/非表示">
+                <span id="togglEye">👁</span>
+              </button>
+            </div>
+            <p class="hint"><a href="https://track.toggl.com/profile" target="_blank" rel="noopener">Toggl Profile</a> ページ下部にあります</p>
+          </div>
+        </div>
+
+        <div class="conn-card">
+          <div class="conn-left">
+            <span class="conn-icon">📅</span>
+            <div>
+              <strong>Google カレンダー</strong>
+              <span class="conn-status" id="googleStatus"></span>
+            </div>
+          </div>
+          <div class="conn-body">
+            <div id="googleAccounts" class="google-accounts"></div>
+            <a id="googleConnectBtn" class="btn btn-outline" href="#">
+              <span class="btn-icon">+</span> アカウントを追加
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Sticky save bar -->
+    <div class="save-bar" id="saveBar">
+      <div class="save-bar-inner">
+        <span class="save-hint" id="saveHint"></span>
+        <button type="button" class="btn btn-primary" id="saveBtn">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/settings.js"></script>
+</body>
+</html>

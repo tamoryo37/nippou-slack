@@ -1,0 +1,11 @@
+node_modules/
+.env
+tokens/
+store/
+google_token.json
+client_secret_*.json
+TogglAPIkey
+config/claude-instructions.md
+.claude/
+.DS_Store
+スクリーンショット*.png

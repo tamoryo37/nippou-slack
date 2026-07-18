@@ -1,0 +1,36 @@
+_metadata:
+  major_version: 1
+  minor_version: 1
+
+display_information:
+  name: nippou-slack
+  description: TogglとGoogle Calendarから日報を作成し、本人確認後にdailyへ投稿します
+  background_color: "#4A154B"
+
+features:
+  bot_user:
+    display_name: nippou-slack
+    always_online: false
+  slash_commands:
+    - command: /nippou
+      url: https://nippou-slack.example.com/slack/events
+      description: 日報を作成・送信
+      should_escape: false
+
+oauth_config:
+  redirect_urls:
+    - https://nippou-slack.example.com/slack/oauth_redirect
+  scopes:
+    bot:
+      - commands
+      - chat:write
+    user:
+      - chat:write
+
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://nippou-slack.example.com/slack/events
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

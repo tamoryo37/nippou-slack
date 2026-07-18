@@ -1,0 +1,28 @@
+{
+  "name": "nippou-slack",
+  "version": "1.0.0",
+  "description": "TogglとGoogle CalendarからClaudeで日報を生成し、Slackへ投稿するボット",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "cli": "node nippou.js",
+    "cli:dry-run": "node nippou.js --dry-run",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@holiday-jp/holiday_jp": "^2.5.1",
+    "@slack/bolt": "^4.1.0",
+    "@slack/web-api": "^7.8.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "googleapis": "^171.4.0"
+  }
+}
