@@ -9,3 +9,5 @@ config/claude-instructions.md
 .claude/
 .DS_Store
 スクリーンショット*.png
+.vercel
+.env*.local

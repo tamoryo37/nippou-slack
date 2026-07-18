@@ -5,13 +5,13 @@
 
 ## 1. 公開URLを決める
 
-Node.jsアプリの3000番ポートへ到達するHTTPS URLを用意します。
+本番環境では次のVercel URLを使います。
 
 ```text
-https://<公開URL>
+https://nippou-slack.vercel.app
 ```
 
-以降は、このURLを `https://<公開URL>` と表記します。
+別の環境へ配置する場合だけ、このURLをその環境の公開URLへ読み替えてください。
 
 ## 2. Slack AppをManifestから作成する
 
@@ -19,15 +19,14 @@ https://<公開URL>
 2. `Create New App` → `From an app manifest` を選ぶ。
 3. 対象Workspaceを選ぶ。
 4. [slack-manifest.example.yaml](../slack-manifest.example.yaml) を貼り付ける。
-5. ファイル内の `https://nippou-slack.example.com` を実際の公開URLへ3か所すべて置き換える。
-6. 内容を確認してAppを作成する。
+5. 内容を確認してAppを作成する。
 
 Manifestには次を設定済みです。
 
 - Slash command: `/nippou`
-- Request URL: `https://<公開URL>/slack/events`
+- Request URL: `https://nippou-slack.vercel.app/slack/events`
 - Interactivity: ON
-- OAuth redirect: `https://<公開URL>/slack/oauth_redirect`
+- OAuth redirect: `https://nippou-slack.vercel.app/slack/oauth_redirect`
 - Bot scopes: `commands`, `chat:write`
 - User scope: `chat:write`
 
@@ -41,7 +40,7 @@ SLACK_CLIENT_ID=
 SLACK_CLIENT_SECRET=
 SLACK_SIGNING_SECRET=
 SLACK_STATE_SECRET=
-APP_URL=https://<公開URL>
+APP_URL=https://nippou-slack.vercel.app
 ```
 
 `SLACK_STATE_SECRET` はSlack画面から取得する値ではありません。次で個別生成します。
@@ -55,7 +54,7 @@ openssl rand -hex 32
 Google Cloud ConsoleのOAuthクライアントへ次を追加します。
 
 ```text
-https://<公開URL>/google/callback
+https://nippou-slack.vercel.app/google/callback
 ```
 
 `.env` に同じ値とGoogleのClient ID / Client Secretを設定します。
@@ -63,7 +62,7 @@ https://<公開URL>/google/callback
 ```dotenv
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=https://<公開URL>/google/callback
+GOOGLE_REDIRECT_URI=https://nippou-slack.vercel.app/google/callback
 ```
 
 ## 5. 起動してWorkspaceへインストールする
@@ -76,7 +75,7 @@ npm start
 ブラウザで次を開き、Slack Workspaceへインストールします。
 
 ```text
-https://<公開URL>/slack/install
+https://nippou-slack.vercel.app/slack/install
 ```
 
 本人名義で投稿する各ユーザーが、それぞれこのURLからOAuthを完了します。ユーザートークンが
@@ -111,10 +110,10 @@ Slack Appの設定画面で次が一致していることを確認します。
 
 | 項目 | 値 |
 |---|---|
-| Slash Command Request URL | `https://<公開URL>/slack/events` |
-| Interactivity Request URL | `https://<公開URL>/slack/events` |
-| OAuth Redirect URL | `https://<公開URL>/slack/oauth_redirect` |
-| Google Redirect URI | `https://<公開URL>/google/callback` |
+| Slash Command Request URL | `https://nippou-slack.vercel.app/slack/events` |
+| Interactivity Request URL | `https://nippou-slack.vercel.app/slack/events` |
+| OAuth Redirect URL | `https://nippou-slack.vercel.app/slack/oauth_redirect` |
+| Google Redirect URI | `https://nippou-slack.vercel.app/google/callback` |
 
 URLやScopeを変更した場合は、Slack AppをWorkspaceへ再インストールします。
 

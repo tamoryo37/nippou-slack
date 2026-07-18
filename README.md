@@ -49,6 +49,9 @@ NIPPOU_AI_INSTRUCTIONS_FILE=./config/claude-instructions.md
 `config/claude-instructions.md` へ、現在カスタムGemに設定している指示をコピーします。
 お手本や文体ルールも同じファイルに含められます。
 
+Vercelへ本番配置する場合、OAuthトークンやユーザー設定はローカルファイルではなく
+Neon Postgresへ暗号化保存します。手順は [Vercel本番設定](docs/VERCEL_SETUP.md) を参照してください。
+
 まずSlackへ送らないdry-runで確認します。
 
 ```bash

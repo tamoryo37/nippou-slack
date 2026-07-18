@@ -6,6 +6,11 @@
   var token = params.get('token');
   var isPreview = params.get('preview') === '1';
 
+  // 署名付きトークンをブラウザ履歴・共有URL・Refererへ残さない。
+  if (token && window.history && window.history.replaceState) {
+    window.history.replaceState(null, document.title, location.pathname);
+  }
+
   if (!token && !isPreview) {
     document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#86868b;">' +
       '<p>Slack で <code>/nippou settings</code> を実行してリンクを取得してください。</p></div>';

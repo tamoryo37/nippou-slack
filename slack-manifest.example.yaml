@@ -13,13 +13,13 @@ features:
     always_online: false
   slash_commands:
     - command: /nippou
-      url: https://nippou-slack.example.com/slack/events
+      url: https://nippou-slack.vercel.app/slack/events
       description: 日報を作成・送信
       should_escape: false
 
 oauth_config:
   redirect_urls:
-    - https://nippou-slack.example.com/slack/oauth_redirect
+    - https://nippou-slack.vercel.app/slack/oauth_redirect
   scopes:
     bot:
       - commands
@@ -30,7 +30,7 @@ oauth_config:
 settings:
   interactivity:
     is_enabled: true
-    request_url: https://nippou-slack.example.com/slack/events
+    request_url: https://nippou-slack.vercel.app/slack/events
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

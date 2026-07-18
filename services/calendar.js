@@ -33,17 +33,18 @@ async function exchangeCode(code) {
   return { tokens, email: data.email };
 }
 
-async function getCalendarEvents(tokens, baseDate, onTokenRefresh) {
-  const oauth2Client = createOAuth2Client();
+async function getCalendarEvents(tokens, baseDate, onTokenRefresh, options = {}) {
+  const oauth2Client = options.oauth2Client || createOAuth2Client();
   oauth2Client.setCredentials(tokens);
 
-  if (onTokenRefresh) {
+  let refreshedTokens = null;
+  if (typeof onTokenRefresh === 'function') {
     oauth2Client.on('tokens', (newTokens) => {
-      onTokenRefresh({ ...tokens, ...newTokens });
+      refreshedTokens = { ...tokens, ...newTokens };
     });
   }
 
-  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  const calendar = options.calendarClient || google.calendar({ version: 'v3', auth: oauth2Client });
   const tomorrow = nextBusinessDay(baseDate);
   const start = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
   const end = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate() + 1);
@@ -55,6 +56,13 @@ async function getCalendarEvents(tokens, baseDate, onTokenRefresh) {
     singleEvents: true,
     orderBy: 'startTime',
   });
+
+  // google-auth-library emits `tokens` during the request. Persisting them is
+  // part of the request lifecycle so a serverless invocation cannot finish
+  // before a refreshed access/refresh token has been stored.
+  if (refreshedTokens && typeof onTokenRefresh === 'function') {
+    await onTokenRefresh(refreshedTokens);
+  }
 
   return formatCalendarEvents(response.data.items || []);
 }

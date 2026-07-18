@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+.claude
+store
+tokens
+test
+*.test.js
+docs
+screenshots
+スクリーンショット*.png
