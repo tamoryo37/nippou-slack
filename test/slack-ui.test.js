@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   MAX_HITOKOTO_LENGTH,
+  buildOnboardingMessage,
   buildReportModal,
   validateHitokoto,
 } = require('../services/slack-ui');
@@ -19,6 +20,18 @@ function viewWithComment(value) {
     },
   };
 }
+
+test('buildOnboardingMessage explains the complete first-use flow', () => {
+  const message = buildOnboardingMessage();
+  const rendered = JSON.stringify(message);
+
+  assert.match(message.text, /初期設定/);
+  assert.match(rendered, /Toggl/);
+  assert.match(rendered, /connect-google/);
+  assert.match(rendered, /set-daily/);
+  assert.match(rendered, /Claude API/);
+  assert.doesNotMatch(rendered, /sk-ant|xox[bp]-/);
+});
 
 test('buildReportModal keeps AI sections editable and hitokoto empty and required', () => {
   const modal = buildReportModal(

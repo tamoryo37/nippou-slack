@@ -18,7 +18,11 @@ const {
 const { nextBusinessDay, formatDateLabel } = require('./services/holidays');
 const { generateStructuredReport, generatePreview } = require('./services/ai');
 const { buildSlackMrkdwn } = require('./services/report');
-const { buildReportModal, validateHitokoto } = require('./services/slack-ui');
+const {
+  buildOnboardingMessage,
+  buildReportModal,
+  validateHitokoto,
+} = require('./services/slack-ui');
 const { respondEphemeral } = require('./services/slack-command-response');
 
 const REQUIRED_SLACK_CONFIG = [
@@ -377,7 +381,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
   if (subcommand === 'settings') {
     const settingsToken = generateSettingsToken(userId, teamId);
     const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const settingsUrl = `${baseUrl}/settings?token=${encodeURIComponent(settingsToken)}`;
+    const settingsUrl = `${baseUrl}/settings.html?token=${encodeURIComponent(settingsToken)}`;
     await respondEphemeral(
       respond,
       `以下のリンクから設定ページを開いてください（1時間有効）:\n<${settingsUrl}|設定ページを開く>`,
@@ -427,10 +431,13 @@ async function handleNippouCommand({ command, client, body, respond }) {
   const targetChannelId = userData.dailyChannelId || command.channel_id;
 
   if (!userData.togglToken) {
-    await respondEphemeral(
-      respond,
-      '先に `/nippou setup` でToggl APIトークンを設定してください。',
-    );
+    await Promise.all([
+      client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildSetupModal(userData),
+      }),
+      respondEphemeral(respond, buildOnboardingMessage()),
+    ]);
     return;
   }
 

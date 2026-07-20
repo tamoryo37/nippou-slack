@@ -2,6 +2,53 @@
 
 const MAX_HITOKOTO_LENGTH = 1000;
 
+function buildOnboardingMessage() {
+  return {
+    text: '日報ボットの初期設定を始めます。セットアップ画面を開きました。',
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: [
+            '👋 *日報ボットへようこそ！*',
+            '初回だけ、次の3ステップを設定します。',
+            '_この案内はあなただけに表示されています。_',
+          ].join('\n'),
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: [
+            '*1. Togglを設定（必須）*',
+            '今開いたセットアップ画面にAPIトークンを入れて保存してください。',
+            '',
+            '*2. Googleカレンダーを連携（任意）*',
+            '保存後に `/nippou connect-google` を実行します。',
+            '',
+            '*3. 投稿先を設定（推奨）*',
+            '日報を投稿したいチャンネルで `/nippou set-daily` を1回実行します。',
+            '',
+            '準備ができたら `/nippou` で日報を作成できます。',
+          ].join('\n'),
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '設定はメンバーごとに個別保存されます。作業名・予定名は日報生成のためClaude APIへ送信され、投稿前に必ず確認・編集できます。',
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function buildReportModal(channelId, todayLines, tomorrowLines, dateLabel, tomorrowLabel) {
   return {
     type: 'modal',
@@ -73,6 +120,7 @@ function validateHitokoto(view) {
 
 module.exports = {
   MAX_HITOKOTO_LENGTH,
+  buildOnboardingMessage,
   buildReportModal,
   validateHitokoto,
 };
