@@ -30,6 +30,7 @@ test('buildOnboardingMessage explains the complete first-use flow', () => {
   assert.match(rendered, /Toggl/);
   assert.match(rendered, /connect-google/);
   assert.match(rendered, /set-daily/);
+  assert.match(rendered, /2026-07-17/);
   assert.match(rendered, /Claude API/);
   assert.doesNotMatch(rendered, /sk-ant|xox[bp]-/);
 });
@@ -41,9 +42,18 @@ test('buildReportModal keeps AI sections editable and hitokoto empty and require
     ['・定例'],
     '7月18日(土)',
     '7月21日(火)',
+    '2026-07-18',
+    '2026-07-21',
   );
 
   const commentBlock = modal.blocks.find((block) => block.block_id === 'comment_block');
+  assert.deepEqual(JSON.parse(modal.private_metadata), {
+    channelId: 'C123',
+    dateLabel: '7月18日(土)',
+    tomorrowLabel: '7月21日(火)',
+    reportDateKey: '2026-07-18',
+    nextBusinessDateKey: '2026-07-21',
+  });
   assert.equal(modal.submit.text, 'dailyへ投稿');
   assert.equal(commentBlock.optional, undefined);
   assert.equal(commentBlock.element.initial_value, undefined);

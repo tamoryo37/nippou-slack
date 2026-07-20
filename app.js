@@ -15,7 +15,7 @@ const {
   installationStore,
   checkStorage,
 } = require('./services/store');
-const { nextBusinessDay, formatDateLabel } = require('./services/holidays');
+const { resolveReportSchedule } = require('./services/report-date');
 const { generateStructuredReport, generatePreview } = require('./services/ai');
 const { buildSlackMrkdwn } = require('./services/report');
 const {
@@ -333,16 +333,19 @@ function buildSetupModal(userData) {
   };
 }
 
-function buildLoadingModal(channelId) {
+function buildLoadingModal(channelId, dateLabel, tomorrowLabel) {
   return {
     type: 'modal',
     callback_id: 'nippou_loading',
     title: { type: 'plain_text', text: '日報を作成中' },
     close: { type: 'plain_text', text: '閉じる' },
-    private_metadata: JSON.stringify({ channelId }),
+    private_metadata: JSON.stringify({ channelId, dateLabel, tomorrowLabel }),
     blocks: [{
       type: 'section',
-      text: { type: 'mrkdwn', text: 'Toggl・カレンダーを取得し、Claudeで日報を生成しています…' },
+      text: {
+        type: 'mrkdwn',
+        text: `${dateLabel}のTogglと、次の営業日（${tomorrowLabel}）のカレンダーを取得しています…`,
+      },
     }],
   };
 }
@@ -416,6 +419,8 @@ async function handleNippouCommand({ command, client, body, respond }) {
       [
         '*にっぽうにぎり - 使い方*',
         '`/nippou` - 日報を作成・送信',
+        '`/nippou 2026-07-17` - 指定日の日報を作成・送信',
+        '`/nippou 7/17` - 年を省略して今年の指定日の日報を作成',
         '`/nippou setup` - Toggl APIトークンを設定',
         '`/nippou settings` - Web設定ページを開く（AI・スタイル・連携）',
         '`/nippou connect-google` - Googleカレンダーを連携',
@@ -427,6 +432,18 @@ async function handleNippouCommand({ command, client, body, respond }) {
   }
 
   // --- /nippou (メイン: 日報作成) ---
+  let reportDate;
+  try {
+    reportDate = resolveReportSchedule(subcommand);
+  } catch (error) {
+    await respondEphemeral(respond, error.message);
+    return;
+  }
+
+  const baseDate = reportDate.date;
+  const tomorrowDateKey = reportDate.nextBusinessDateKey;
+  const dateLabel = reportDate.dateLabel;
+  const tomorrowLabel = reportDate.nextBusinessDateLabel;
   const userData = await getUserData(userId, teamId);
   const targetChannelId = userData.dailyChannelId || command.channel_id;
 
@@ -444,13 +461,13 @@ async function handleNippouCommand({ command, client, body, respond }) {
   // Slackのtrigger_idは短時間で失効するため、外部APIを呼ぶ前にモーダルを開く。
   const loadingResult = await client.views.open({
     trigger_id: body.trigger_id,
-    view: buildLoadingModal(targetChannelId),
+    view: buildLoadingModal(targetChannelId, dateLabel, tomorrowLabel),
   });
 
   // Fetch Toggl entries
   let todayLines = [];
   try {
-    todayLines = await getTogglEntries(userData.togglToken, new Date());
+    todayLines = await getTogglEntries(userData.togglToken, baseDate);
     if (todayLines.length === 0) todayLines = ['・（記録なし）'];
   } catch (e) {
     console.error('Toggl error:', e.message);
@@ -463,7 +480,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
   if (accounts.length > 0) {
     for (const account of accounts) {
       try {
-        const events = await getCalendarEvents(account.tokens, new Date(), async (refreshed) => {
+        const events = await getCalendarEvents(account.tokens, baseDate, async (refreshed) => {
           account.tokens = refreshed;
           await saveUserData(userId, { googleAccounts: accounts }, teamId);
         });
@@ -474,10 +491,6 @@ async function handleNippouCommand({ command, client, body, respond }) {
     }
   }
   if (tomorrowLines.length === 0) tomorrowLines = ['・（予定なし）'];
-
-  const baseDate = new Date();
-  const dateLabel = formatDateLabel(baseDate);
-  const tomorrowLabel = formatDateLabel(nextBusinessDay(baseDate));
 
   // AI generation (if configured and API key available)
   let aiTodayLines = todayLines;
@@ -505,6 +518,8 @@ async function handleNippouCommand({ command, client, body, respond }) {
       aiTomorrowLines,
       dateLabel,
       tomorrowLabel,
+      reportDate.dateKey,
+      tomorrowDateKey,
     ),
   });
 }

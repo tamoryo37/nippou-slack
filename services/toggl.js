@@ -1,6 +1,11 @@
+'use strict';
+
+const { dateKeyToEndOfDay, dateKeyToStartOfDay, toBusinessDateKey } = require('./holidays');
+
 async function getTogglEntries(apiToken, baseDate) {
-  const startOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
-  const endOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + 1);
+  const dateKey = toBusinessDateKey(baseDate);
+  const startOfDay = dateKeyToStartOfDay(dateKey);
+  const endOfDay = dateKeyToEndOfDay(dateKey);
 
   const response = await fetch(
     `https://api.track.toggl.com/api/v9/me/time_entries?start_date=${startOfDay.toISOString()}&end_date=${endOfDay.toISOString()}`,

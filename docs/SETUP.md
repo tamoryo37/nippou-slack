@@ -247,6 +247,7 @@ dailyチャンネル内で次を一度実行します。
 | コマンド | 説明 |
 |---------|------|
 | `/nippou` | 日報モーダルを開く（Toggl + Calendar データをプリフィル） |
+| `/nippou 2026-07-17` | 指定日の日報モーダルを開く（`7/17`・`7月17日`も可） |
 | `/nippou setup` | Toggl API トークンを設定（Slack モーダル） |
 | `/nippou settings` | Web 設定ページを開く（AI・スタイル・連携） |
 | `/nippou connect-google` | Google カレンダーアカウントを連携 |

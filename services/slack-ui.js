@@ -26,12 +26,13 @@ function buildOnboardingMessage() {
             '今開いたセットアップ画面にAPIトークンを入れて保存してください。',
             '',
             '*2. Googleカレンダーを連携（任意）*',
-            '保存後に `/nippou connect-google` を実行します。',
+            '保存後に `/nippou connect-google` を実行します。やることは水曜・土日祝を除く次の営業日から取得します。',
             '',
             '*3. 投稿先を設定（推奨）*',
             '日報を投稿したいチャンネルで `/nippou set-daily` を1回実行します。',
             '',
             '準備ができたら `/nippou` で日報を作成できます。',
+            '送り忘れた日は `/nippou 2026-07-17` のように日付を付けられます。',
           ].join('\n'),
         },
       },
@@ -49,14 +50,28 @@ function buildOnboardingMessage() {
   };
 }
 
-function buildReportModal(channelId, todayLines, tomorrowLines, dateLabel, tomorrowLabel) {
+function buildReportModal(
+  channelId,
+  todayLines,
+  tomorrowLines,
+  dateLabel,
+  tomorrowLabel,
+  reportDateKey = '',
+  nextBusinessDateKey = '',
+) {
   return {
     type: 'modal',
     callback_id: 'nippou_submit',
     title: { type: 'plain_text', text: '日報を確認・送信' },
     submit: { type: 'plain_text', text: 'dailyへ投稿' },
     close: { type: 'plain_text', text: 'キャンセル' },
-    private_metadata: JSON.stringify({ channelId, dateLabel, tomorrowLabel }),
+    private_metadata: JSON.stringify({
+      channelId,
+      dateLabel,
+      tomorrowLabel,
+      reportDateKey,
+      nextBusinessDateKey,
+    }),
     blocks: [
       {
         type: 'input',
