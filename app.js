@@ -18,7 +18,12 @@ const {
 const { nextBusinessDay, formatDateLabel } = require('./services/holidays');
 const { generateStructuredReport, generatePreview } = require('./services/ai');
 const { buildSlackMrkdwn } = require('./services/report');
-const { buildReportModal, validateHitokoto } = require('./services/slack-ui');
+const {
+  buildOnboardingMessage,
+  buildReportModal,
+  validateHitokoto,
+} = require('./services/slack-ui');
+const { respondEphemeral } = require('./services/slack-command-response');
 
 const REQUIRED_SLACK_CONFIG = [
   'SLACK_SIGNING_SECRET',
@@ -347,10 +352,17 @@ function buildLoadingModal(channelId) {
 app.command('/nippou', async (context) => {
   const { ack } = context;
   await ack();
-  return continueAfterAck(handleNippouCommand(context), 'Slash command processing error');
+  const task = handleNippouCommand(context).catch(async (error) => {
+    console.error('Slash command processing error:', error);
+    await respondEphemeral(
+      context.respond,
+      '日報ボットの処理に失敗しました。少し待ってからもう一度お試しください。',
+    );
+  });
+  return continueAfterAck(task, 'Slash command error response failed');
 });
 
-async function handleNippouCommand({ command, client, body }) {
+async function handleNippouCommand({ command, client, body, respond }) {
   const userId = command.user_id;
   const teamId = command.team_id || getTeamId(body);
   const subcommand = (command.text || '').trim();
@@ -369,43 +381,39 @@ async function handleNippouCommand({ command, client, body }) {
   if (subcommand === 'settings') {
     const settingsToken = generateSettingsToken(userId, teamId);
     const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const settingsUrl = `${baseUrl}/settings?token=${encodeURIComponent(settingsToken)}`;
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: userId,
-      text: `以下のリンクから設定ページを開いてください（1時間有効）:\n<${settingsUrl}|設定ページを開く>`,
-    });
+    const settingsUrl = `${baseUrl}/settings.html?token=${encodeURIComponent(settingsToken)}`;
+    await respondEphemeral(
+      respond,
+      `以下のリンクから設定ページを開いてください（1時間有効）:\n<${settingsUrl}|設定ページを開く>`,
+    );
     return;
   }
 
   // --- /nippou connect-google ---
   if (subcommand === 'connect-google') {
     const authUrl = generateAuthUrl(generateGoogleState(userId, teamId));
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: userId,
-      text: `以下のリンクからGoogleカレンダーを連携してください:\n<${authUrl}|Googleアカウントを連携する>`,
-    });
+    await respondEphemeral(
+      respond,
+      `以下のリンクからGoogleカレンダーを連携してください:\n<${authUrl}|Googleアカウントを連携する>`,
+    );
     return;
   }
 
   // --- /nippou set-daily ---
   if (subcommand === 'set-daily') {
     await saveUserData(userId, { dailyChannelId: command.channel_id }, teamId);
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: userId,
-      text: `日報の投稿先を <#${command.channel_id}> に設定しました。`,
-    });
+    await respondEphemeral(
+      respond,
+      `日報の投稿先を <#${command.channel_id}> に設定しました。`,
+    );
     return;
   }
 
   // --- /nippou help ---
   if (subcommand === 'help') {
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: userId,
-      text: [
+    await respondEphemeral(
+      respond,
+      [
         '*日報ボット - 使い方*',
         '`/nippou` - 日報を作成・送信',
         '`/nippou setup` - Toggl APIトークンを設定',
@@ -414,7 +422,7 @@ async function handleNippouCommand({ command, client, body }) {
         '`/nippou set-daily` - 実行中のチャンネルを日報の投稿先に設定',
         '`/nippou help` - このヘルプを表示',
       ].join('\n'),
-    });
+    );
     return;
   }
 
@@ -423,11 +431,13 @@ async function handleNippouCommand({ command, client, body }) {
   const targetChannelId = userData.dailyChannelId || command.channel_id;
 
   if (!userData.togglToken) {
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: userId,
-      text: '先に `/nippou setup` でToggl APIトークンを設定してください。',
-    });
+    await Promise.all([
+      client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildSetupModal(userData),
+      }),
+      respondEphemeral(respond, buildOnboardingMessage()),
+    ]);
     return;
   }
 

@@ -84,6 +84,15 @@ https://nippou-slack.vercel.app/slack/install
 
 ## 6. Slack上で初期設定する
 
+各メンバーは、まずSlackで次を実行します。
+
+```text
+/nippou
+```
+
+Slackに初回用の3ステップガイドが表示され、Togglのセットアップ画面が自動で開きます。
+セットアップを後から開き直す場合は、次のコマンドも使えます。
+
 ```text
 /nippou setup
 /nippou connect-google
