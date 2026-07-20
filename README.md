@@ -1,7 +1,11 @@
 # nippou-slack
 
+> Slack表示名: *にっぽうにぎり* 🍣
+
 TogglとGoogle Calendarの情報をClaudeで日報の下書きに整え、Slack上で本人が
 「ひとこと」を入力してdailyチャンネルへ投稿します。カスタムGemへのコピーは不要です。
+
+Slack Appのアイコンは [assets/nippou-nigiri-icon.png](assets/nippou-nigiri-icon.png) を使用します。
 
 ## 推奨フロー（Slack `/nippou`）
 

@@ -48,7 +48,7 @@ Toggl の作業記録と Google カレンダーの予定を自動取得し、編
 
 1. [Slack API: Your Apps](https://api.slack.com/apps) にアクセス
 2. **Create New App** > **From scratch** を選択
-3. App Name: `日報ボット`、Workspace を選択して作成
+3. App Name: `にっぽうにぎり`、Workspace を選択して作成
 
 ### 2. OAuth & Permissions
 
