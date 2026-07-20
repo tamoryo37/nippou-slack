@@ -26,6 +26,7 @@ test('buildOnboardingMessage explains the complete first-use flow', () => {
   const rendered = JSON.stringify(message);
 
   assert.match(message.text, /初期設定/);
+  assert.match(rendered, /にっぽうにぎり/);
   assert.match(rendered, /Toggl/);
   assert.match(rendered, /connect-google/);
   assert.match(rendered, /set-daily/);

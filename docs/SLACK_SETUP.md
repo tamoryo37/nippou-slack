@@ -1,6 +1,6 @@
 # Slack設定
 
-`nippou-slack` はSlackのスラッシュコマンドとモーダルを使います。Incoming Webhookだけでは
+`nippou-slack`（Slack表示名: `にっぽうにぎり`）はSlackのスラッシュコマンドとモーダルを使います。Incoming Webhookだけでは
 入力を受け取れないため、Slack Appを1つ作成し、常時到達できるHTTPS URLでこのアプリを起動します。
 
 ## 1. 公開URLを決める
@@ -80,7 +80,7 @@ https://nippou-slack.vercel.app/slack/install
 
 本人名義で投稿する各ユーザーが、それぞれこのURLからOAuthを完了します。ユーザートークンが
 ない場合はボット投稿へ切り替わるため、その運用を使う場合はdailyチャンネルで
-`/invite @nippou-slack` を実行してください。
+`/invite @にっぽうにぎり` を実行してください。
 
 ## 6. Slack上で初期設定する
 

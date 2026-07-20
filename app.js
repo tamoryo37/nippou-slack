@@ -356,7 +356,7 @@ app.command('/nippou', async (context) => {
     console.error('Slash command processing error:', error);
     await respondEphemeral(
       context.respond,
-      '日報ボットの処理に失敗しました。少し待ってからもう一度お試しください。',
+      'にっぽうにぎりの処理に失敗しました。少し待ってからもう一度お試しください。',
     );
   });
   return continueAfterAck(task, 'Slash command error response failed');
@@ -414,7 +414,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
     await respondEphemeral(
       respond,
       [
-        '*日報ボット - 使い方*',
+        '*にっぽうにぎり - 使い方*',
         '`/nippou` - 日報を作成・送信',
         '`/nippou setup` - Toggl APIトークンを設定',
         '`/nippou settings` - Web設定ページを開く（AI・スタイル・連携）',

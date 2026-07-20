@@ -4,14 +4,14 @@ const MAX_HITOKOTO_LENGTH = 1000;
 
 function buildOnboardingMessage() {
   return {
-    text: '日報ボットの初期設定を始めます。セットアップ画面を開きました。',
+    text: 'にっぽうにぎりの初期設定を始めます。セットアップ画面を開きました。',
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
           text: [
-            '👋 *日報ボットへようこそ！*',
+            '👋 *にっぽうにぎりへようこそ！*',
             '初回だけ、次の3ステップを設定します。',
             '_この案内はあなただけに表示されています。_',
           ].join('\n'),

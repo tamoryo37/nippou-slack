@@ -3,13 +3,13 @@ _metadata:
   minor_version: 1
 
 display_information:
-  name: nippou-slack
-  description: TogglとGoogle Calendarから日報を作成し、本人確認後にdailyへ投稿します
-  background_color: "#4A154B"
+  name: にっぽうにぎり
+  description: TogglとGoogle Calendarから日報をにぎり、本人確認後にdailyへ投稿します
+  background_color: "#D94A2E"
 
 features:
   bot_user:
-    display_name: nippou-slack
+    display_name: にっぽうにぎり
     always_online: false
   slash_commands:
     - command: /nippou
