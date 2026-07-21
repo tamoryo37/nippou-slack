@@ -1,5 +1,9 @@
 const { google } = require('googleapis');
-const { nextBusinessDay } = require('./holidays');
+const {
+  addDaysToDateKey,
+  dateKeyToStartOfDay,
+  nextBusinessDateKey,
+} = require('./holidays');
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
@@ -45,9 +49,10 @@ async function getCalendarEvents(tokens, baseDate, onTokenRefresh, options = {})
   }
 
   const calendar = options.calendarClient || google.calendar({ version: 'v3', auth: oauth2Client });
-  const tomorrow = nextBusinessDay(baseDate);
-  const start = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-  const end = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate() + 1);
+  const targetDateKey = nextBusinessDateKey(baseDate);
+  const endDateKey = addDaysToDateKey(targetDateKey, 1);
+  const start = dateKeyToStartOfDay(targetDateKey);
+  const end = dateKeyToStartOfDay(endDateKey);
 
   const response = await calendar.events.list({
     calendarId: 'primary',

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { formatTogglEntries } = require('../services/toggl');
+const { formatTogglEntries, getTogglEntries } = require('../services/toggl');
 const { formatCalendarEvents, getCalendarEvents } = require('../services/calendar');
 
 test('Toggl output keeps task names, removes durations, and deduplicates names', () => {
@@ -29,6 +29,23 @@ test('Calendar output keeps event names without start times or all-day labels', 
     '・資料レビュー',
     '・（タイトルなし）',
   ]);
+});
+
+test('Toggl requests the explicitly selected Tokyo calendar date', async (t) => {
+  const originalFetch = global.fetch;
+  let requestedUrl;
+  global.fetch = async (url) => {
+    requestedUrl = String(url);
+    return { ok: true, async json() { return [{ description: '過去日の作業' }]; } };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  const result = await getTogglEntries('test-token', new Date('2026-07-17T12:00:00+09:00'));
+  assert.deepEqual(result, ['・過去日の作業']);
+  assert.match(requestedUrl, /start_date=2026-07-16T15:00:00\.000Z/);
+  assert.match(requestedUrl, /end_date=2026-07-17T14:59:59\.999Z/);
 });
 
 test('Calendar token refresh is persisted before getCalendarEvents resolves', async () => {
@@ -81,8 +98,34 @@ test('Calendar token refresh is persisted before getCalendarEvents resolves', as
   });
   assert.equal(request.calendarId, 'primary');
   assert.equal(request.singleEvents, true);
+  assert.equal(request.timeMin, '2026-07-20T15:00:00.000Z');
+  assert.equal(request.timeMax, '2026-07-21T15:00:00.000Z');
 
   finishPersistence();
   assert.deepEqual(await resultPromise, ['・翌営業日の定例']);
   assert.equal(resolved, true);
+});
+
+test('Calendar skips Wednesday for a Tuesday report', async () => {
+  const oauth2Client = new EventEmitter();
+  oauth2Client.setCredentials = () => {};
+  let request;
+  const calendarClient = {
+    events: {
+      async list(value) {
+        request = value;
+        return { data: { items: [] } };
+      },
+    },
+  };
+
+  await getCalendarEvents(
+    {},
+    new Date('2026-07-14T12:00:00+09:00'),
+    null,
+    { oauth2Client, calendarClient },
+  );
+
+  assert.equal(request.timeMin, '2026-07-15T15:00:00.000Z');
+  assert.equal(request.timeMax, '2026-07-16T15:00:00.000Z');
 });

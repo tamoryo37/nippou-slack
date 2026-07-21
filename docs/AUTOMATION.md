@@ -8,9 +8,9 @@
 
 ## 処理順序
 
-1. `nippou.js` が対象日をAsia/Tokyoで確定する。
-2. 土日・日本の祝日なら、`--force` がない限り終了する。
-3. Togglから当日の作業、Google Calendarから次の営業日の予定を取得する。
+1. `nippou.js` が対象日を`NIPPOU_TIMEZONE`（デフォルト: Asia/Tokyo）で確定する。
+2. 水曜・土日・日本の祝日なら、`--force` がない限り終了する。
+3. Togglから対象日の作業、Google Calendarから水曜・土日祝を除く次の営業日の予定を取得する。
 4. `services/ai.js` がClaudeへ未信頼データとして渡す。
 5. Claude Structured Outputsで `todayItems`、`tomorrowItems` を得る。
 6. `services/report.js` が本人入力の `comment` と結合してSlack mrkdwnを組み立て、意図しないメンションと長すぎる投稿を拒否する。

@@ -15,6 +15,7 @@ features:
     - command: /nippou
       url: https://nippou-slack.vercel.app/slack/events
       description: 日報を作成・送信
+      usage_hint: "[YYYY-MM-DD]"
       should_escape: false
 
 oauth_config:
