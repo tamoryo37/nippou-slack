@@ -1,7 +1,7 @@
 # Vercel本番設定
 
 本番はVercel Functions、永続ストレージはVercel MarketplaceのNeon Postgresを使います。
-Slack・Google・TogglのOAuth情報は、`NIPPOU_ENCRYPTION_KEY`によるAES-256-GCM暗号化後にDBへ保存されます。
+Slack・Google・Notion・TogglのOAuth情報は、`NIPPOU_ENCRYPTION_KEY`によるAES-256-GCM暗号化後にDBへ保存されます。
 
 ## 1. Vercelプロジェクト
 
@@ -28,6 +28,9 @@ Productionへ次を登録します。秘密値は `Sensitive` にします。
 | `GOOGLE_CLIENT_ID` | Google OAuth Web Client |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Web Client |
 | `GOOGLE_REDIRECT_URI` | `https://nippou-slack.vercel.app/google/callback` |
+| `NOTION_CLIENT_ID` | Notion Public connection の OAuth client ID（タスク連携を使う場合） |
+| `NOTION_CLIENT_SECRET` | Notion Public connection の OAuth client secret（タスク連携を使う場合） |
+| `NOTION_REDIRECT_URI` | `https://nippou-slack.vercel.app/notion/callback` |
 | `ANTHROPIC_API_KEY` | Anthropic Consoleで発行したキー |
 | `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` |
 | `NIPPOU_AI_PROVIDER` | `api` |
@@ -46,6 +49,7 @@ Productionへ次を登録します。秘密値は `Sensitive` にします。
 | Slack Interactivity | `https://nippou-slack.vercel.app/slack/events` |
 | Slack OAuth Redirect | `https://nippou-slack.vercel.app/slack/oauth_redirect` |
 | Google OAuth Redirect | `https://nippou-slack.vercel.app/google/callback` |
+| Notion OAuth Redirect | `https://nippou-slack.vercel.app/notion/callback` |
 | Slack App Install | `https://nippou-slack.vercel.app/slack/install` |
 
 URLまたはSlack scopesを変えた後は、Slack AppをWorkspaceへ再インストールします。
@@ -61,6 +65,7 @@ curl https://nippou-slack.vercel.app/healthz
 ```text
 /nippou setup
 /nippou connect-google
+/nippou tasks
 /nippou set-daily
 /nippou
 ```

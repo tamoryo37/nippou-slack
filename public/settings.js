@@ -5,10 +5,11 @@
   var params = new URLSearchParams(location.search);
   var token = params.get('token');
   var isPreview = params.get('preview') === '1';
+  var notionResult = params.get('notion');
 
   // 署名付きトークンをブラウザ履歴・共有URL・Refererへ残さない。
   if (token && window.history && window.history.replaceState) {
-    window.history.replaceState(null, document.title, location.pathname);
+    window.history.replaceState(null, document.title, location.pathname + location.hash);
   }
 
   if (!token && !isPreview) {
@@ -33,6 +34,21 @@
   const googleStatus = document.getElementById('googleStatus');
   const googleAccounts = document.getElementById('googleAccounts');
   const googleConnectBtn = document.getElementById('googleConnectBtn');
+  const taskStatus = document.getElementById('taskStatus');
+  const notionStatus = document.getElementById('notionStatus');
+  const notionEnabled = document.getElementById('notionEnabled');
+  const notionConnectBtn = document.getElementById('notionConnectBtn');
+  const notionDisconnectBtn = document.getElementById('notionDisconnectBtn');
+  const notionDatabaseUrl = document.getElementById('notionDatabaseUrl');
+  const notionTestBtn = document.getElementById('notionTestBtn');
+  const notionTestResult = document.getElementById('notionTestResult');
+  const jsonStatus = document.getElementById('jsonStatus');
+  const jsonEnabled = document.getElementById('jsonEnabled');
+  const jsonName = document.getElementById('jsonName');
+  const jsonUrl = document.getElementById('jsonUrl');
+  const jsonBearerToken = document.getElementById('jsonBearerToken');
+  const jsonTestBtn = document.getElementById('jsonTestBtn');
+  const jsonTestResult = document.getElementById('jsonTestResult');
   const saveBar = document.getElementById('saveBar');
   const saveBtn = document.getElementById('saveBtn');
   const saveHint = document.getElementById('saveHint');
@@ -41,6 +57,20 @@
   let dirty = false;
   let originalData = {};
   let exampleCount = 0;
+
+  const notionMappingFields = {
+    title: document.getElementById('notionTitleProperty'),
+    status: document.getElementById('notionStatusProperty'),
+    completedStatus: document.getElementById('notionDoneStatus'),
+    scheduledDate: document.getElementById('notionScheduledProperty'),
+    dueDate: document.getElementById('notionDueProperty'),
+    completedAt: document.getElementById('notionCompletedProperty'),
+    category: document.getElementById('notionCategoryProperty'),
+    workCategory: document.getElementById('notionWorkValue'),
+    reportable: document.getElementById('notionReportableProperty'),
+    confidentiality: document.getElementById('notionSensitivityProperty'),
+    excludedConfidentiality: document.getElementById('notionExcludedSensitivity'),
+  };
 
   // --- Dirty tracking ---
   function markDirty() {
@@ -118,6 +148,11 @@
         ai: { preset: 'concise', customPrompt: '', examples: [] },
         googleAccounts: [],
         googleAuthUrl: '#',
+        notionAuthUrl: '#',
+        taskSources: {
+          notion: { available: true, connected: false, enabled: false, mapping: {} },
+          json: { enabled: false, hasBearerToken: false },
+        },
       });
       return;
     }
@@ -183,6 +218,87 @@
     if (data.googleAuthUrl) {
       googleConnectBtn.href = data.googleAuthUrl;
     }
+
+    // Optional task sources
+    var sources = data.taskSources || {};
+    var notion = sources.notion || {};
+    var json = sources.json || {};
+
+    notionEnabled.checked = Boolean(notion.enabled);
+    notionEnabled.disabled = !notion.connected;
+    notionDatabaseUrl.value = notion.databaseUrl || '';
+    Object.keys(notionMappingFields).forEach(function (key) {
+      if (notion.mapping && typeof notion.mapping[key] === 'string') {
+        notionMappingFields[key].value = notion.mapping[key];
+      }
+    });
+
+    if (notion.connected) {
+      notionStatus.textContent = notion.workspaceName
+        ? notion.workspaceName + ' に接続済み'
+        : '接続済み';
+      notionStatus.className = 'conn-status connected';
+      notionConnectBtn.textContent = '接続し直す';
+      notionDisconnectBtn.classList.remove('hidden');
+    } else if (!notion.available) {
+      notionStatus.textContent = 'アプリ側のNotion設定待ち';
+      notionStatus.className = 'conn-status';
+      notionConnectBtn.classList.add('hidden');
+    } else {
+      notionStatus.textContent = '未接続';
+      notionStatus.className = 'conn-status';
+    }
+    if (data.notionAuthUrl) notionConnectBtn.href = data.notionAuthUrl;
+
+    jsonEnabled.checked = Boolean(json.enabled);
+    jsonName.value = json.name || '';
+    jsonUrl.value = json.url || '';
+    jsonStatus.textContent = json.url
+      ? (json.hasBearerToken ? 'URL・認証設定済み' : 'URL設定済み')
+      : '未設定';
+    jsonStatus.className = json.url ? 'conn-status connected' : 'conn-status';
+
+    updateTaskStatus();
+
+    if (notionResult === 'connected') {
+      showToast('Notionを接続しました');
+      location.hash = 'taskSources';
+    } else if (notionResult === 'error') {
+      showToast('Notionの接続に失敗しました');
+      location.hash = 'taskSources';
+    }
+  }
+
+  function updateTaskStatus() {
+    var count = 0;
+    if (notionEnabled.checked && !notionEnabled.disabled) count++;
+    if (jsonEnabled.checked && jsonUrl.value.trim()) count++;
+    taskStatus.textContent = count > 0 ? count + '件 使用中' : '未設定';
+    taskStatus.className = count > 0 ? 'conn-status connected' : 'conn-status';
+  }
+
+  function getNotionMapping() {
+    var mapping = {};
+    Object.keys(notionMappingFields).forEach(function (key) {
+      mapping[key] = notionMappingFields[key].value.trim();
+    });
+    return mapping;
+  }
+
+  function getTaskSourcesBody() {
+    return {
+      notion: {
+        enabled: notionEnabled.checked,
+        databaseUrl: notionDatabaseUrl.value.trim(),
+        mapping: getNotionMapping(),
+      },
+      json: {
+        enabled: jsonEnabled.checked,
+        name: jsonName.value.trim(),
+        url: jsonUrl.value.trim(),
+        bearerToken: jsonBearerToken.value,
+      },
+    };
   }
 
   // --- Save ---
@@ -202,12 +318,15 @@
         customPrompt: customPrompt.value.trim(),
         examples: getExamples(),
       },
+      taskSources: getTaskSourcesBody(),
     };
 
     fetch('/api/settings', { method: 'PUT', headers: headers, body: JSON.stringify(body) })
       .then(function (res) {
-        if (!res.ok) throw new Error('Save failed');
-        return res.json();
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || '保存に失敗しました');
+          return data;
+        });
       })
       .then(function () {
         showToast('保存しました');
@@ -221,13 +340,88 @@
           togglStatus.textContent = '未設定';
           togglStatus.className = 'conn-status';
         }
+        jsonBearerToken.value = '';
+        updateTaskStatus();
       })
-      .catch(function () {
-        showToast('保存に失敗しました');
+      .catch(function (error) {
+        showToast(error.message || '保存に失敗しました');
       })
       .finally(function () {
         saveBtn.disabled = false;
         saveBtn.textContent = '保存する';
+      });
+  });
+
+  function showTestResult(element, message, ok) {
+    element.textContent = message;
+    element.classList.remove('hidden', 'success', 'error');
+    element.classList.add(ok ? 'success' : 'error');
+  }
+
+  function testTaskSource(provider, button, resultElement) {
+    button.disabled = true;
+    var previousText = button.textContent;
+    button.textContent = '確認中...';
+    var config = provider === 'notion'
+      ? getTaskSourcesBody().notion
+      : getTaskSourcesBody().json;
+
+    fetch('/api/task-sources/test', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ provider: provider, config: config }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || '接続を確認できませんでした');
+          return data;
+        });
+      })
+      .then(function (data) {
+        var lines = ['接続できました'];
+        if (data.done && data.done.length) lines.push('やったこと: ' + data.done.join(' / '));
+        if (data.will && data.will.length) lines.push('やること: ' + data.will.join(' / '));
+        if ((!data.done || !data.done.length) && (!data.will || !data.will.length)) {
+          lines.push('対象期間のタスクは0件です');
+        }
+        showTestResult(resultElement, lines.join('\n'), true);
+      })
+      .catch(function (error) {
+        showTestResult(resultElement, error.message, false);
+      })
+      .finally(function () {
+        button.disabled = false;
+        button.textContent = previousText;
+      });
+  }
+
+  notionTestBtn.addEventListener('click', function () {
+    testTaskSource('notion', notionTestBtn, notionTestResult);
+  });
+  jsonTestBtn.addEventListener('click', function () {
+    testTaskSource('json', jsonTestBtn, jsonTestResult);
+  });
+
+  notionDisconnectBtn.addEventListener('click', function () {
+    if (!window.confirm('Notionとの接続を解除しますか？')) return;
+    notionDisconnectBtn.disabled = true;
+    fetch('/api/task-sources/notion/disconnect', { method: 'POST', headers: headers })
+      .then(function (res) {
+        if (!res.ok) throw new Error('解除に失敗しました');
+        notionStatus.textContent = '未接続';
+        notionStatus.className = 'conn-status';
+        notionEnabled.checked = false;
+        notionEnabled.disabled = true;
+        notionDisconnectBtn.classList.add('hidden');
+        notionConnectBtn.textContent = 'Notionを接続';
+        showToast('Notionの接続を解除しました');
+        updateTaskStatus();
+      })
+      .catch(function () {
+        showToast('Notionの接続解除に失敗しました');
+      })
+      .finally(function () {
+        notionDisconnectBtn.disabled = false;
       });
   });
 
@@ -269,6 +463,15 @@
   presetInputs.forEach(function (input) { input.addEventListener('change', markDirty); });
   customPrompt.addEventListener('input', markDirty);
   togglToken.addEventListener('input', markDirty);
+  notionEnabled.addEventListener('change', function () { markDirty(); updateTaskStatus(); });
+  notionDatabaseUrl.addEventListener('input', markDirty);
+  Object.keys(notionMappingFields).forEach(function (key) {
+    notionMappingFields[key].addEventListener('input', markDirty);
+  });
+  jsonEnabled.addEventListener('change', function () { markDirty(); updateTaskStatus(); });
+  jsonName.addEventListener('input', markDirty);
+  jsonUrl.addEventListener('input', function () { markDirty(); updateTaskStatus(); });
+  jsonBearerToken.addEventListener('input', markDirty);
   addExampleBtn.addEventListener('click', function () { addExample(''); markDirty(); });
 
   // --- Init ---

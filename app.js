@@ -19,6 +19,16 @@ const { resolveReportSchedule } = require('./services/report-date');
 const { generateStructuredReport, generatePreview } = require('./services/ai');
 const { buildSlackMrkdwn } = require('./services/report');
 const {
+  DEFAULT_NOTION_MAPPING,
+  exchangeNotionCode,
+  fetchTaskItems,
+  generateNotionAuthUrl,
+  isNotionConfigured,
+  resolveNotionDatabase,
+  revokeNotionConnection,
+  validateTaskSource,
+} = require('./services/tasks');
+const {
   buildOnboardingMessage,
   buildReportModal,
   validateHitokoto,
@@ -179,6 +189,8 @@ const generateSettingsToken = (userId, teamId) => generateSignedToken('settings'
 const verifySettingsToken = (token) => verifySignedToken(token, 'settings');
 const generateGoogleState = (userId, teamId) => generateSignedToken('google', userId, teamId);
 const verifyGoogleState = (token) => verifySignedToken(token, 'google');
+const generateNotionState = (userId, teamId) => generateSignedToken('notion', userId, teamId);
+const verifyNotionState = (token) => verifySignedToken(token, 'notion');
 
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization || '';
@@ -188,6 +200,104 @@ function authMiddleware(req, res, next) {
   req.slackUserId = identity.userId;
   req.slackTeamId = identity.teamId;
   next();
+}
+
+function stringSetting(value, maxLength = 2000) {
+  if (value === undefined || value === null) return '';
+  if (typeof value !== 'string') throw new TypeError('Setting values must be strings');
+  return value.trim().slice(0, maxLength);
+}
+
+function readTaskSources(userData = {}) {
+  const stored = userData.taskSources && typeof userData.taskSources === 'object'
+    ? userData.taskSources
+    : {};
+  const notion = stored.notion && typeof stored.notion === 'object' ? stored.notion : {};
+  const json = stored.json && typeof stored.json === 'object' ? stored.json : {};
+  return {
+    notion: {
+      enabled: Boolean(notion.enabled),
+      databaseUrl: stringSetting(notion.databaseUrl),
+      databaseId: stringSetting(notion.databaseId),
+      dataSourceId: stringSetting(notion.dataSourceId),
+      mapping: { ...DEFAULT_NOTION_MAPPING, ...(notion.mapping || {}) },
+    },
+    json: {
+      enabled: Boolean(json.enabled),
+      name: stringSetting(json.name, 100),
+      url: stringSetting(json.url),
+      bearerToken: stringSetting(json.bearerToken, 8000),
+    },
+  };
+}
+
+function publicTaskSources(userData = {}) {
+  const taskSources = readTaskSources(userData);
+  const connected = Boolean(userData.notionConnection?.accessToken);
+  return {
+    notion: {
+      ...taskSources.notion,
+      available: isNotionConfigured(),
+      connected,
+      workspaceName: connected ? stringSetting(userData.notionConnection.workspaceName, 200) : '',
+    },
+    json: {
+      enabled: taskSources.json.enabled,
+      name: taskSources.json.name,
+      url: taskSources.json.url,
+      hasBearerToken: Boolean(taskSources.json.bearerToken),
+    },
+  };
+}
+
+function notionSource(userData, override = {}) {
+  const stored = readTaskSources(userData).notion;
+  return {
+    provider: 'notion',
+    ...stored,
+    ...override,
+    mapping: { ...stored.mapping, ...(override.mapping || {}) },
+    connection: userData.notionConnection,
+  };
+}
+
+function jsonSource(userData, override = {}) {
+  const stored = readTaskSources(userData).json;
+  return {
+    provider: 'json',
+    ...stored,
+    ...override,
+    bearerToken: stringSetting(override.bearerToken) || stored.bearerToken,
+  };
+}
+
+function configuredTaskSources(userData) {
+  const taskSources = readTaskSources(userData);
+  const sources = [];
+  if (taskSources.notion.enabled && userData.notionConnection?.accessToken
+    && (taskSources.notion.databaseUrl || taskSources.notion.dataSourceId)) {
+    sources.push(notionSource(userData));
+  }
+  if (taskSources.json.enabled && taskSources.json.url) {
+    sources.push(jsonSource(userData));
+  }
+  return sources;
+}
+
+function mergeSourceLines(...groups) {
+  const seen = new Set();
+  const lines = [];
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue;
+    for (const value of group) {
+      if (typeof value !== 'string') continue;
+      const title = value.trim().replace(/^(?:[-*+•・]\s*)/, '').trim();
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      lines.push(`・${title}`);
+    }
+  }
+  return lines;
 }
 
 // --- Settings API ---
@@ -209,6 +319,10 @@ receiver.router.get('/api/settings', authMiddleware, async (req, res) => {
       ai: data.ai || {},
       googleAccounts: (data.googleAccounts || []).map((a) => ({ email: a.email })),
       googleAuthUrl: generateAuthUrl(generateGoogleState(req.slackUserId, req.slackTeamId)),
+      notionAuthUrl: isNotionConfigured()
+        ? generateNotionAuthUrl(generateNotionState(req.slackUserId, req.slackTeamId))
+        : '',
+      taskSources: publicTaskSources(data),
     });
   } catch (error) {
     console.error('Settings read error:', error.message);
@@ -218,17 +332,223 @@ receiver.router.get('/api/settings', authMiddleware, async (req, res) => {
 
 receiver.router.put('/api/settings', express.json(), authMiddleware, async (req, res) => {
   try {
-    const { togglToken, ai } = req.body;
+    const { togglToken, ai, taskSources } = req.body;
     const update = {};
     if (togglToken !== undefined) update.togglToken = togglToken;
     if (ai !== undefined) update.ai = ai;
+    if (taskSources !== undefined) {
+      if (!taskSources || typeof taskSources !== 'object' || Array.isArray(taskSources)) {
+        throw new TypeError('Task sources must be an object');
+      }
+      const existingData = await getUserData(req.slackUserId, req.slackTeamId);
+      const existing = readTaskSources(existingData);
+
+      const incomingNotion = taskSources.notion && typeof taskSources.notion === 'object'
+        ? taskSources.notion
+        : {};
+      const notion = {
+        enabled: Boolean(incomingNotion.enabled),
+        databaseUrl: stringSetting(incomingNotion.databaseUrl),
+        databaseId: existing.notion.databaseId,
+        dataSourceId: existing.notion.dataSourceId,
+        mapping: { ...DEFAULT_NOTION_MAPPING },
+      };
+      if (incomingNotion.mapping !== undefined) {
+        if (!incomingNotion.mapping || typeof incomingNotion.mapping !== 'object'
+          || Array.isArray(incomingNotion.mapping)) {
+          throw new TypeError('Notion mapping must be an object');
+        }
+        for (const key of Object.keys(DEFAULT_NOTION_MAPPING)) {
+          notion.mapping[key] = stringSetting(
+            incomingNotion.mapping[key] === undefined
+              ? DEFAULT_NOTION_MAPPING[key]
+              : incomingNotion.mapping[key],
+            200,
+          );
+          if (!notion.mapping[key]) throw new TypeError(`Notion mapping.${key} is required`);
+        }
+      } else {
+        notion.mapping = existing.notion.mapping;
+      }
+
+      const databaseChanged = notion.databaseUrl !== existing.notion.databaseUrl;
+      const mappingChanged = Object.keys(DEFAULT_NOTION_MAPPING)
+        .some((key) => notion.mapping[key] !== existing.notion.mapping[key]);
+      const enablingNotion = notion.enabled && !existing.notion.enabled;
+      if (databaseChanged) {
+        notion.databaseId = '';
+      }
+      // Mapping edits made while Notion is disabled must still force a fresh
+      // property check the next time the source is enabled.
+      if (databaseChanged || mappingChanged) {
+        notion.dataSourceId = '';
+      }
+      if (notion.enabled) {
+        if (!existingData.notionConnection?.accessToken) {
+          throw new TypeError('Notionを先に接続してください');
+        }
+        if (!notion.databaseUrl) throw new TypeError('NotionのタスクDB URLを入力してください');
+        if (!notion.dataSourceId || databaseChanged || mappingChanged || enablingNotion) {
+          const resolved = await resolveNotionDatabase(
+            existingData.notionConnection.accessToken,
+            notion.databaseUrl,
+          );
+          notion.databaseId = resolved.databaseId;
+          notion.dataSourceId = resolved.dataSourceId;
+          const availableProperties = new Map(
+            resolved.properties.map((property) => [property.name, property.type]),
+          );
+          const expectedPropertyTypes = {
+            title: ['title'],
+            status: ['status', 'select'],
+            scheduledDate: ['date'],
+            dueDate: ['date'],
+            completedAt: ['date'],
+            category: ['select', 'multi_select', 'status'],
+            reportable: ['checkbox'],
+            confidentiality: ['select', 'multi_select', 'status'],
+          };
+          const missing = Object.keys(expectedPropertyTypes)
+            .map((key) => notion.mapping[key])
+            .filter((propertyName) => !availableProperties.has(propertyName));
+          if (missing.length > 0) {
+            throw new TypeError(`Notionに見つからない項目があります: ${missing.join(', ')}`);
+          }
+          const incompatible = Object.entries(expectedPropertyTypes)
+            .filter(([key, allowedTypes]) => !allowedTypes.includes(
+              availableProperties.get(notion.mapping[key]),
+            ))
+            .map(([key]) => notion.mapping[key]);
+          if (incompatible.length > 0) {
+            throw new TypeError(`Notionの項目種類が合いません: ${incompatible.join(', ')}`);
+          }
+        }
+        validateTaskSource({
+          provider: 'notion',
+          ...notion,
+          connection: existingData.notionConnection,
+        });
+      }
+
+      const incomingJson = taskSources.json && typeof taskSources.json === 'object'
+        ? taskSources.json
+        : {};
+      const json = {
+        enabled: Boolean(incomingJson.enabled),
+        name: stringSetting(incomingJson.name, 100),
+        url: stringSetting(incomingJson.url),
+        bearerToken: stringSetting(incomingJson.bearerToken, 8000)
+          || existing.json.bearerToken,
+      };
+      if (!json.url) json.bearerToken = '';
+      if (json.enabled) validateTaskSource({ provider: 'json', ...json });
+
+      update.taskSources = { notion, json };
+    }
     await saveUserData(req.slackUserId, update, req.slackTeamId);
     res.json({ ok: true });
   } catch (error) {
     console.error('Settings update error:', error.message);
+    if (error instanceof TypeError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: 'Settings could not be saved' });
   }
 });
+
+receiver.router.post(
+  '/api/task-sources/test',
+  express.json(),
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const userData = await getUserData(req.slackUserId, req.slackTeamId);
+      const schedule = resolveReportSchedule('');
+      const provider = stringSetting(req.body?.provider, 20);
+      const config = req.body?.config && typeof req.body.config === 'object'
+        ? req.body.config
+        : {};
+
+      let source;
+      if (provider === 'notion') {
+        if (!userData.notionConnection?.accessToken) {
+          res.status(400).json({ error: 'Notionを先に接続してください' });
+          return;
+        }
+        source = notionSource(userData, {
+          enabled: true,
+          databaseUrl: stringSetting(config.databaseUrl),
+          mapping: config.mapping,
+          databaseId: '',
+          dataSourceId: '',
+        });
+        const resolved = await resolveNotionDatabase(
+          userData.notionConnection.accessToken,
+          source.databaseUrl,
+        );
+        source.databaseId = resolved.databaseId;
+        source.dataSourceId = resolved.dataSourceId;
+      } else if (provider === 'json') {
+        source = jsonSource(userData, {
+          enabled: true,
+          url: stringSetting(config.url),
+          bearerToken: stringSetting(config.bearerToken, 8000),
+        });
+      } else {
+        res.status(400).json({ error: '対応していないタスク連携です' });
+        return;
+      }
+
+      const result = await fetchTaskItems(
+        source,
+        schedule.dateKey,
+        schedule.nextBusinessDateKey,
+        {
+          onConnectionRefresh: async (notionConnection) => {
+            await saveUserData(
+              req.slackUserId,
+              { notionConnection },
+              req.slackTeamId,
+            );
+          },
+        },
+      );
+      res.json(result);
+    } catch (error) {
+      console.error('Task source test error:', error.message);
+      res.status(400).json({ error: error.message || '接続を確認できませんでした' });
+    }
+  },
+);
+
+receiver.router.post(
+  '/api/task-sources/notion/disconnect',
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const userData = await getUserData(req.slackUserId, req.slackTeamId);
+      if (userData.notionConnection) {
+        try {
+          await revokeNotionConnection(userData.notionConnection);
+        } catch (error) {
+          console.error('Notion revoke error:', error.message);
+        }
+      }
+      const taskSources = readTaskSources(userData);
+      taskSources.notion.enabled = false;
+      await saveUserData(
+        req.slackUserId,
+        { notionConnection: null, taskSources },
+        req.slackTeamId,
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Notion disconnect error:', error.message);
+      res.status(500).json({ error: 'Notionの接続を解除できませんでした' });
+    }
+  },
+);
 
 receiver.router.post('/api/preview', express.json(), authMiddleware, async (req, res) => {
   try {
@@ -284,6 +604,50 @@ receiver.router.get('/google/callback', async (req, res) => {
   } catch (err) {
     console.error('Google OAuth error:', err);
     res.status(500).send('認証に失敗しました。もう一度お試しください。');
+  }
+});
+
+// --- Notion OAuth callback route ---
+
+receiver.router.get('/notion/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  const identity = verifyNotionState(state);
+  const baseUrl = (process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`)
+    .replace(/\/$/, '');
+
+  if (error || !code || !identity) {
+    const fallback = identity
+      ? `${baseUrl}/settings.html?token=${encodeURIComponent(
+        generateSettingsToken(identity.userId, identity.teamId),
+      )}&notion=error#taskSources`
+      : `${baseUrl}/settings.html?notion=error#taskSources`;
+    res.redirect(302, fallback);
+    return;
+  }
+
+  try {
+    const notionConnection = await exchangeNotionCode(code);
+    await saveUserData(
+      identity.userId,
+      { notionConnection },
+      identity.teamId,
+    );
+    const settingsToken = generateSettingsToken(identity.userId, identity.teamId);
+    res.redirect(
+      302,
+      `${baseUrl}/settings.html?token=${encodeURIComponent(
+        settingsToken,
+      )}&notion=connected#taskSources`,
+    );
+  } catch (oauthError) {
+    console.error('Notion OAuth error:', oauthError.message);
+    const settingsToken = generateSettingsToken(identity.userId, identity.teamId);
+    res.redirect(
+      302,
+      `${baseUrl}/settings.html?token=${encodeURIComponent(
+        settingsToken,
+      )}&notion=error#taskSources`,
+    );
   }
 });
 
@@ -344,7 +708,7 @@ function buildLoadingModal(channelId, dateLabel, tomorrowLabel) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `${dateLabel}のTogglと、次の営業日（${tomorrowLabel}）のカレンダーを取得しています…`,
+        text: `${dateLabel}の記録と、次の営業日（${tomorrowLabel}）の予定・タスクを取得しています…`,
       },
     }],
   };
@@ -392,6 +756,20 @@ async function handleNippouCommand({ command, client, body, respond }) {
     return;
   }
 
+  // --- /nippou tasks ---
+  if (subcommand === 'tasks') {
+    const settingsToken = generateSettingsToken(userId, teamId);
+    const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const settingsUrl = `${baseUrl}/settings.html?token=${encodeURIComponent(
+      settingsToken,
+    )}#taskSources`;
+    await respondEphemeral(
+      respond,
+      `タスク管理の連携は以下から設定できます（1時間有効・連携は任意です）:\n<${settingsUrl}|タスク管理を設定する>`,
+    );
+    return;
+  }
+
   // --- /nippou connect-google ---
   if (subcommand === 'connect-google') {
     const authUrl = generateAuthUrl(generateGoogleState(userId, teamId));
@@ -423,6 +801,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
         '`/nippou 7/17` - 年を省略して今年の指定日の日報を作成',
         '`/nippou setup` - Toggl APIトークンを設定',
         '`/nippou settings` - Web設定ページを開く（AI・スタイル・連携）',
+        '`/nippou tasks` - Notion・JSONタスク連携を設定（任意）',
         '`/nippou connect-google` - Googleカレンダーを連携',
         '`/nippou set-daily` - 実行中のチャンネルを日報の投稿先に設定',
         '`/nippou help` - このヘルプを表示',
@@ -447,7 +826,14 @@ async function handleNippouCommand({ command, client, body, respond }) {
   const userData = await getUserData(userId, teamId);
   const targetChannelId = userData.dailyChannelId || command.channel_id;
 
-  if (!userData.togglToken) {
+  const taskSources = configuredTaskSources(userData);
+  const hasConfiguredSource = Boolean(
+    userData.togglToken
+    || (userData.googleAccounts || []).length
+    || taskSources.length,
+  );
+
+  if (!hasConfiguredSource) {
     await Promise.all([
       client.views.open({
         trigger_id: body.trigger_id,
@@ -464,32 +850,71 @@ async function handleNippouCommand({ command, client, body, respond }) {
     view: buildLoadingModal(targetChannelId, dateLabel, tomorrowLabel),
   });
 
-  // Fetch Toggl entries
-  let todayLines = [];
-  try {
-    todayLines = await getTogglEntries(userData.togglToken, baseDate);
-    if (todayLines.length === 0) todayLines = ['・（記録なし）'];
-  } catch (e) {
-    console.error('Toggl error:', e.message);
-    todayLines = ['・（取得失敗）'];
-  }
-
-  // Fetch Google Calendar events
-  let tomorrowLines = [];
   const accounts = userData.googleAccounts || [];
-  if (accounts.length > 0) {
-    for (const account of accounts) {
-      try {
-        const events = await getCalendarEvents(account.tokens, baseDate, async (refreshed) => {
-          account.tokens = refreshed;
-          await saveUserData(userId, { googleAccounts: accounts }, teamId);
-        });
-        tomorrowLines.push(...events);
-      } catch (e) {
-        console.error(`Calendar error (${account.email}):`, e.message);
-      }
+  const sourceWarnings = [];
+  let integrationSaveQueue = Promise.resolve();
+  const persistIntegrationUpdate = (update) => {
+    const save = integrationSaveQueue.then(
+      () => saveUserData(userId, update, teamId),
+    );
+    integrationSaveQueue = save.catch(() => {});
+    return save;
+  };
+  const togglPromise = userData.togglToken
+    ? getTogglEntries(userData.togglToken, baseDate).catch((error) => {
+      console.error('Toggl error:', error.message);
+      sourceWarnings.push('Toggl');
+      return [];
+    })
+    : Promise.resolve([]);
+  const calendarPromise = Promise.all(accounts.map(async (account) => {
+    try {
+      return await getCalendarEvents(account.tokens, baseDate, async (refreshed) => {
+        account.tokens = refreshed;
+        await persistIntegrationUpdate({ googleAccounts: accounts });
+      });
+    } catch (error) {
+      console.error(`Calendar error (${account.email}):`, error.message);
+      sourceWarnings.push('Googleカレンダー');
+      return [];
     }
-  }
+  }));
+  const tasksPromise = Promise.all(taskSources.map(async (source) => {
+    try {
+      return await fetchTaskItems(
+        source,
+        reportDate.dateKey,
+        tomorrowDateKey,
+        {
+          onConnectionRefresh: async (notionConnection) => {
+            userData.notionConnection = notionConnection;
+            await persistIntegrationUpdate({ notionConnection });
+          },
+        },
+      );
+    } catch (error) {
+      console.error(`Task source error (${source.provider}):`, error.message);
+      sourceWarnings.push(source.provider === 'notion' ? 'Notion' : 'JSONタスク');
+      return { done: [], will: [] };
+    }
+  }));
+
+  // Toggl、カレンダー、タスク連携は独立しているため並列取得する。
+  const [togglLines, calendarGroups, taskGroups] = await Promise.all([
+    togglPromise,
+    calendarPromise,
+    tasksPromise,
+  ]);
+
+  let todayLines = mergeSourceLines(
+    togglLines,
+    ...taskGroups.map((result) => result.done),
+  );
+  let tomorrowLines = mergeSourceLines(
+    ...calendarGroups,
+    ...taskGroups.map((result) => result.will),
+  );
+  if (todayLines.length === 0) todayLines = ['・（記録なし）'];
   if (tomorrowLines.length === 0) tomorrowLines = ['・（予定なし）'];
 
   // AI generation (if configured and API key available)
@@ -520,6 +945,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
       tomorrowLabel,
       reportDate.dateKey,
       tomorrowDateKey,
+      [...new Set(sourceWarnings)],
     ),
   });
 }

@@ -2,7 +2,7 @@
 
 > Slack表示名: *にっぽうにぎり* 🍣
 
-TogglとGoogle Calendarの情報をClaudeで日報の下書きに整え、Slack上で本人が
+Toggl、Google Calendar、任意のタスク管理ツールの情報をClaudeで日報の下書きに整え、Slack上で本人が
 「ひとこと」を入力してdailyチャンネルへ投稿します。カスタムGemへのコピーは不要です。
 
 Slack Appのアイコンは [assets/nippou-nigiri-icon.png](assets/nippou-nigiri-icon.png) を使用します。
@@ -10,7 +10,7 @@ Slack Appのアイコンは [assets/nippou-nigiri-icon.png](assets/nippou-nigiri
 ## 推奨フロー（Slack `/nippou`）
 
 ```text
-Toggl + Google Calendar
+Toggl + Google Calendar + Tasks
           ↓
 Claude Structured Outputs
    （やったこと / やること）
@@ -101,9 +101,18 @@ Togglは指定日の記録を取得します。「やること」は指定日の
 たとえば火曜の日報では木曜、2026年7月17日（金）の日報では
 海の日を飛ばして7月21日（火）の予定を使います。
 
-初回はSlackに3ステップの使い方が表示され、Togglのセットアップ画面が
-自動で開きます。その後、必要に応じてGoogleカレンダーを連携し、投稿先
+初回はSlackに4ステップの使い方が表示され、Togglのセットアップ画面が
+自動で開きます。その後、必要に応じてGoogleカレンダーとタスク管理を連携し、投稿先
 チャンネルで `/nippou set-daily` を1回実行します。
+
+タスク管理は `/nippou tasks` から設定します。Notionは本人のOAuth認証後に
+タスクDBのURLと項目対応を保存します。プライベートページも、認証画面で本人が
+明示的に許可した範囲だけを読み取ります。その他のツールは、通常のWebページではなく
+共通形式のHTTPS JSONフィードとして接続できます。どちらも任意で、未設定でも
+これまでどおり日報を作成できます。
+
+田本用のNotion既定値は `区分=仕事`、`日報出力=true` です。
+`個人・家族` と `機密区分=vault参照のみ` は取得段階で除外され、Claudeにも送られません。
 
 生成済みの「やったこと」「やること」を確認し、本人の「ひとこと」を入力して
 `dailyへ投稿` を押します。無人cronからの自動投稿は、本人入力必須の方針とは両立しないため

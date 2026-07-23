@@ -149,6 +149,9 @@ openssl rand -hex 32
 | `GOOGLE_CLIENT_ID` | Google OAuth の Client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth の Client Secret |
 | `GOOGLE_REDIRECT_URI` | Google OAuth コールバック URL |
+| `NOTION_CLIENT_ID` | Notion Public connection の OAuth client ID（任意） |
+| `NOTION_CLIENT_SECRET` | Notion Public connection の OAuth client secret（任意） |
+| `NOTION_REDIRECT_URI` | Notion OAuth コールバック URL |
 | `NIPPOU_AI_PROVIDER` | `auto` / `api` / `claude-cli`（デフォルト: `auto`） |
 | `ANTHROPIC_API_KEY` | Anthropic API利用時のキー。ローカルClaude Code利用時は不要 |
 | `ANTHROPIC_MODEL` | Claude APIモデル（デフォルト: `claude-haiku-4-5-20251001`） |
@@ -188,7 +191,7 @@ ngrok http 3000
 
 ## チームメンバーの初期設定
 
-各メンバーが行う作業は以下の **5ステップ** です。
+各メンバーが行う作業は以下の **6ステップ** です。
 
 ### Step 1: アプリを認証
 
@@ -217,7 +220,17 @@ API トークンを入力して保存します。
 表示されるリンクをクリックし、Google アカウントを認証します。
 複数のアカウントを連携したい場合は、このコマンドを繰り返し実行します。
 
-### Step 4: AI書き方設定（任意）
+### Step 4: タスク管理を連携（任意）
+
+```text
+/nippou tasks
+```
+
+Notionの場合は本人がOAuth画面でタスクDBまたは親ページを許可し、設定画面に
+データベースURLを貼ります。その他のツールは共通形式のHTTPS JSONフィードを設定します。
+個人タスクや `vault参照のみ` のタスクは取得対象外です。
+
+### Step 5: AI書き方設定（任意）
 
 ```
 /nippou settings
@@ -232,7 +245,7 @@ API トークンを入力して保存します。
 
 設定はすべて Web UI 上で完結し、Toggl・Google カレンダーの連携もここから行えます。
 
-### Step 5: dailyチャンネルを投稿先に設定
+### Step 6: dailyチャンネルを投稿先に設定
 
 dailyチャンネル内で次を一度実行します。
 
@@ -246,10 +259,11 @@ dailyチャンネル内で次を一度実行します。
 
 | コマンド | 説明 |
 |---------|------|
-| `/nippou` | 日報モーダルを開く（Toggl + Calendar データをプリフィル） |
+| `/nippou` | 日報モーダルを開く（Toggl + Calendar + Tasks データをプリフィル） |
 | `/nippou 2026-07-17` | 指定日の日報モーダルを開く（`7/17`・`7月17日`も可） |
 | `/nippou setup` | Toggl API トークンを設定（Slack モーダル） |
 | `/nippou settings` | Web 設定ページを開く（AI・スタイル・連携） |
+| `/nippou tasks` | Notion・JSONタスク連携を設定（任意） |
 | `/nippou connect-google` | Google カレンダーアカウントを連携 |
 | `/nippou set-daily` | 実行中のチャンネルを日報の投稿先に設定 |
 | `/nippou help` | ヘルプを表示 |
@@ -270,6 +284,7 @@ nippou-slack/
 │   ├── holidays.js        # 営業日計算・祝日判定
 │   ├── toggl.js           # Toggl API クライアント
 │   ├── calendar.js        # Google Calendar API クライアント
+│   ├── tasks.js           # Notion OAuth/API・共通JSONタスク連携
 │   └── store.js           # ファイルベースのデータストア
 ├── config/
 │   └── claude-instructions.example.md # カスタム指示の雛形

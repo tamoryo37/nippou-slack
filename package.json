@@ -1,7 +1,7 @@
 {
   "name": "nippou-slack",
   "version": "1.0.0",
-  "description": "TogglとGoogle CalendarからClaudeで日報を生成し、Slackへ投稿するボット",
+  "description": "Toggl、Google Calendar、タスク管理ツールからClaudeで日報を生成し、Slackへ投稿するボット",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
