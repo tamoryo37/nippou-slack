@@ -143,6 +143,110 @@
             </a>
           </div>
         </div>
+
+        <div class="conn-card" id="taskSources">
+          <div class="conn-left">
+            <span class="conn-icon">✅</span>
+            <div>
+              <strong>タスク管理（任意）</strong>
+              <span class="conn-status" id="taskStatus"></span>
+            </div>
+          </div>
+          <p class="conn-description">
+            完了したタスクを「やったこと」、次の営業日の未完了タスクを「やること」に追加します。
+            未設定でも日報は作成できます。
+          </p>
+
+          <div class="task-provider">
+            <div class="task-provider-header">
+              <div>
+                <strong>Notion</strong>
+                <span class="conn-status" id="notionStatus"></span>
+              </div>
+              <label class="switch-label">
+                <input type="checkbox" id="notionEnabled">
+                日報に使う
+              </label>
+            </div>
+            <div class="conn-body">
+              <a id="notionConnectBtn" class="btn btn-outline" href="#">
+                Notionを接続
+              </a>
+              <button type="button" class="btn btn-outline hidden" id="notionDisconnectBtn">
+                接続を解除
+              </button>
+              <label class="field-label" for="notionDatabaseUrl">タスクデータベースURL</label>
+              <input type="url" id="notionDatabaseUrl" class="input"
+                placeholder="https://www.notion.so/...">
+              <p class="hint">
+                接続時に、タスクDBまたはその親ページだけを選んでください。プライベートページも読み取り専用で連携できます。
+              </p>
+
+              <details class="advanced-settings">
+                <summary>項目の対応を確認・変更</summary>
+                <div class="mapping-grid">
+                  <label>タスク名<input id="notionTitleProperty" class="input" value="タスク名"></label>
+                  <label>ステータス<input id="notionStatusProperty" class="input" value="ステータス"></label>
+                  <label>完了の値<input id="notionDoneStatus" class="input" value="完了"></label>
+                  <label>予定日<input id="notionScheduledProperty" class="input" value="予定日時"></label>
+                  <label>期限<input id="notionDueProperty" class="input" value="期限"></label>
+                  <label>完了日時<input id="notionCompletedProperty" class="input" value="完了日時"></label>
+                  <label>仕事・個人の区分<input id="notionCategoryProperty" class="input" value="区分"></label>
+                  <label>仕事の値<input id="notionWorkValue" class="input" value="仕事"></label>
+                  <label>日報対象<input id="notionReportableProperty" class="input" value="日報出力"></label>
+                  <label>機密区分<input id="notionSensitivityProperty" class="input" value="機密区分"></label>
+                  <label>除外する機密区分<input id="notionExcludedSensitivity" class="input" value="vault参照のみ"></label>
+                </div>
+              </details>
+              <button type="button" class="btn btn-outline" id="notionTestBtn">取得内容をテスト</button>
+              <div class="connection-test hidden" id="notionTestResult"></div>
+            </div>
+          </div>
+
+          <div class="task-provider">
+            <div class="task-provider-header">
+              <div>
+                <strong>その他のタスクツール（JSON）</strong>
+                <span class="conn-status" id="jsonStatus"></span>
+              </div>
+              <label class="switch-label">
+                <input type="checkbox" id="jsonEnabled">
+                日報に使う
+              </label>
+            </div>
+            <div class="conn-body">
+              <label class="field-label" for="jsonName">接続名</label>
+              <input type="text" id="jsonName" class="input" placeholder="例: Asana連携">
+              <label class="field-label" for="jsonUrl">HTTPS JSONフィードURL</label>
+              <input type="url" id="jsonUrl" class="input" placeholder="https://example.com/nippou-tasks.json">
+              <label class="field-label" for="jsonBearerToken">Bearerトークン（任意）</label>
+              <input type="password" id="jsonBearerToken" class="input"
+                placeholder="空欄なら保存済みのトークンを維持">
+              <p class="hint">
+                通常のWebページではなく、共通形式のJSONを返すHTTPS URLを指定します。
+                <code>reportable: true</code> かつ <code>category: "work"</code> のタスクだけを取得します。
+              </p>
+              <details class="advanced-settings">
+                <summary>JSON形式を見る</summary>
+                <pre class="json-example">{
+  "version": 1,
+  "tasks": [{
+    "id": "task-123",
+    "title": "提案書を送付",
+    "status": "done",
+    "scheduledDate": "2026-07-24",
+    "dueDate": "2026-07-24",
+    "completedAt": "2026-07-23T15:30:00+09:00",
+    "category": "work",
+    "reportable": true
+  }]
+}</pre>
+              </details>
+              <button type="button" class="btn btn-outline" id="jsonTestBtn">接続をテスト</button>
+              <div class="connection-test hidden" id="jsonTestResult"></div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 

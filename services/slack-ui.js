@@ -12,7 +12,7 @@ function buildOnboardingMessage() {
           type: 'mrkdwn',
           text: [
             '👋 *にっぽうにぎりへようこそ！*',
-            '初回だけ、次の3ステップを設定します。',
+            '初回だけ、次の4ステップを設定します。',
             '_この案内はあなただけに表示されています。_',
           ].join('\n'),
         },
@@ -28,7 +28,10 @@ function buildOnboardingMessage() {
             '*2. Googleカレンダーを連携（任意）*',
             '保存後に `/nippou connect-google` を実行します。やることは水曜・土日祝を除く次の営業日から取得します。',
             '',
-            '*3. 投稿先を設定（推奨）*',
+            '*3. タスク管理を連携（任意）*',
+            '`/nippou tasks` からNotionや共通JSONフィードを接続できます。完了タスクは「やったこと」、次の営業日のタスクは「やること」に追加されます。',
+            '',
+            '*4. 投稿先を設定（推奨）*',
             '日報を投稿したいチャンネルで `/nippou set-daily` を1回実行します。',
             '',
             '準備ができたら `/nippou` で日報を作成できます。',
@@ -42,7 +45,7 @@ function buildOnboardingMessage() {
         elements: [
           {
             type: 'mrkdwn',
-            text: '設定はメンバーごとに個別保存されます。作業名・予定名は日報生成のためClaude APIへ送信され、投稿前に必ず確認・編集できます。',
+            text: '設定はメンバーごとに個別保存されます。作業名・予定名・対象タスク名は日報生成のためClaude APIへ送信され、投稿前に必ず確認・編集できます。個人タスクや除外対象の機密タスクは取得しません。',
           },
         ],
       },
@@ -58,6 +61,7 @@ function buildReportModal(
   tomorrowLabel,
   reportDateKey = '',
   nextBusinessDateKey = '',
+  warnings = [],
 ) {
   return {
     type: 'modal',
@@ -73,6 +77,13 @@ function buildReportModal(
       nextBusinessDateKey,
     }),
     blocks: [
+      ...(Array.isArray(warnings) && warnings.length > 0 ? [{
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `⚠️ 一部の連携から取得できませんでした: ${warnings.join('、')}。内容を確認してから投稿してください。`,
+        }],
+      }] : []),
       {
         type: 'input',
         block_id: 'today_block',

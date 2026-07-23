@@ -62,6 +62,20 @@ test('buildReportModal keeps AI sections editable and hitokoto empty and require
   assert.match(commentBlock.label.text, /必須・本人入力/);
 });
 
+test('buildReportModal shows non-blocking source warnings only in the review modal', () => {
+  const modal = buildReportModal(
+    'C123',
+    ['・実装'],
+    ['・定例'],
+    '7月18日(土)',
+    '7月21日(火)',
+    '2026-07-18',
+    '2026-07-21',
+    ['Notion'],
+  );
+  assert.match(JSON.stringify(modal.blocks), /一部の連携から取得できませんでした.*Notion/);
+});
+
 test('validateHitokoto rejects missing, blank, and oversized values', () => {
   assert.deepEqual(validateHitokoto({}), {
     comment: '',
