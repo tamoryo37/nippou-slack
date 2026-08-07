@@ -4,7 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { formatTogglEntries, getTogglEntries } = require('../services/toggl');
-const { formatCalendarEvents, getCalendarEvents } = require('../services/calendar');
+const {
+  formatCalendarEvents,
+  getCalendarEventSelection,
+  getCalendarEvents,
+  selectCalendarEvents,
+} = require('../services/calendar');
 
 test('Toggl output keeps task names, removes durations, and deduplicates names', () => {
   assert.deepEqual(formatTogglEntries([
@@ -28,6 +33,45 @@ test('Calendar output keeps event names without start times or all-day labels', 
     '・顧客定例',
     '・資料レビュー',
     '・（タイトルなし）',
+  ]);
+});
+
+test('Calendar excludes work locations, Busy blocks, and configured exact titles', () => {
+  assert.deepEqual(selectCalendarEvents([
+    { summary: '自宅', eventType: 'workingLocation' },
+    { summary: 'オフィス', workingLocationProperties: {} },
+    { summary: 'Ｂｕｓｙ' },
+    { summary: '・ 朝タスク ' },
+    { summary: '朝タスクの確認' },
+    { summary: '顧客定例', start: { date: '2026-07-21' } },
+  ]), {
+    included: [
+      '・朝タスクの確認',
+      '・顧客定例',
+    ],
+    excluded: [
+      { title: '自宅', reason: '勤務場所' },
+      { title: 'オフィス', reason: '勤務場所' },
+      { title: 'Ｂｕｓｙ', reason: 'ブロック予定' },
+      { title: '・ 朝タスク ', reason: '除外タイトル' },
+    ],
+  });
+});
+
+test('Calendar exclusion settings can be disabled explicitly', () => {
+  const reportFilters = {
+    excludeWorkingLocations: false,
+    excludeBusyEvents: false,
+    excludedTitles: [],
+  };
+  assert.deepEqual(formatCalendarEvents([
+    { summary: '自宅', eventType: 'workingLocation' },
+    { summary: 'Busy' },
+    { summary: '朝タスク' },
+  ], reportFilters), [
+    '・自宅',
+    '・Busy',
+    '・朝タスク',
   ]);
 });
 
@@ -104,6 +148,44 @@ test('Calendar token refresh is persisted before getCalendarEvents resolves', as
   finishPersistence();
   assert.deepEqual(await resultPromise, ['・翌営業日の定例']);
   assert.equal(resolved, true);
+});
+
+test('Calendar selection works with injected clients and reportFilters together', async () => {
+  const oauth2Client = new EventEmitter();
+  oauth2Client.setCredentials = () => {};
+  const calendarClient = {
+    events: {
+      async list() {
+        return {
+          data: {
+            items: [
+              { summary: '自宅', eventType: 'workingLocation' },
+              { summary: '朝タスク' },
+              { summary: '顧客定例' },
+            ],
+          },
+        };
+      },
+    },
+  };
+
+  const selection = await getCalendarEventSelection({}, new Date('2026-07-17T12:00:00+09:00'), null, {
+    oauth2Client,
+    calendarClient,
+    reportFilters: {
+      excludeWorkingLocations: true,
+      excludeBusyEvents: false,
+      excludedTitles: ['朝タスク'],
+    },
+  });
+
+  assert.deepEqual(selection, {
+    included: ['・顧客定例'],
+    excluded: [
+      { title: '自宅', reason: '勤務場所' },
+      { title: '朝タスク', reason: '除外タイトル' },
+    ],
+  });
 });
 
 test('Calendar skips Wednesday for a Tuesday report', async () => {

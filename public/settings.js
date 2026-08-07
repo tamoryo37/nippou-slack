@@ -34,6 +34,11 @@
   const googleStatus = document.getElementById('googleStatus');
   const googleAccounts = document.getElementById('googleAccounts');
   const googleConnectBtn = document.getElementById('googleConnectBtn');
+  const excludeWorkingLocations = document.getElementById('excludeWorkingLocations');
+  const excludeBusyEvents = document.getElementById('excludeBusyEvents');
+  const excludedTitles = document.getElementById('excludedTitles');
+  const calendarTestBtn = document.getElementById('calendarTestBtn');
+  const calendarTestResult = document.getElementById('calendarTestResult');
   const taskStatus = document.getElementById('taskStatus');
   const notionStatus = document.getElementById('notionStatus');
   const notionEnabled = document.getElementById('notionEnabled');
@@ -149,6 +154,11 @@
         googleAccounts: [],
         googleAuthUrl: '#',
         notionAuthUrl: '#',
+        reportFilters: {
+          excludeWorkingLocations: true,
+          excludeBusyEvents: true,
+          excludedTitles: ['朝タスク'],
+        },
         taskSources: {
           notion: { available: true, connected: false, enabled: false, mapping: {} },
           json: { enabled: false, hasBearerToken: false },
@@ -213,11 +223,20 @@
       googleStatus.textContent = '未連携';
       googleStatus.className = 'conn-status';
     }
+    calendarTestBtn.disabled = gAccounts.length === 0;
 
     // Google connect link
     if (data.googleAuthUrl) {
       googleConnectBtn.href = data.googleAuthUrl;
     }
+
+    // Report exclusions
+    var reportFilters = data.reportFilters || {};
+    excludeWorkingLocations.checked = reportFilters.excludeWorkingLocations !== false;
+    excludeBusyEvents.checked = reportFilters.excludeBusyEvents !== false;
+    excludedTitles.value = Array.isArray(reportFilters.excludedTitles)
+      ? reportFilters.excludedTitles.join('\n')
+      : '朝タスク';
 
     // Optional task sources
     var sources = data.taskSources || {};
@@ -301,6 +320,18 @@
     };
   }
 
+  function getReportFiltersBody() {
+    var titles = excludedTitles.value.split(/\r?\n/)
+      .map(function (title) { return title.trim(); })
+      .filter(Boolean);
+
+    return {
+      excludeWorkingLocations: excludeWorkingLocations.checked,
+      excludeBusyEvents: excludeBusyEvents.checked,
+      excludedTitles: titles,
+    };
+  }
+
   // --- Save ---
   saveBtn.addEventListener('click', function () {
     saveBtn.disabled = true;
@@ -318,6 +349,7 @@
         customPrompt: customPrompt.value.trim(),
         examples: getExamples(),
       },
+      reportFilters: getReportFiltersBody(),
       taskSources: getTaskSourcesBody(),
     };
 
@@ -369,7 +401,11 @@
     fetch('/api/task-sources/test', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ provider: provider, config: config }),
+      body: JSON.stringify({
+        provider: provider,
+        config: config,
+        reportFilters: getReportFiltersBody(),
+      }),
     })
       .then(function (res) {
         return res.json().then(function (data) {
@@ -400,6 +436,53 @@
   });
   jsonTestBtn.addEventListener('click', function () {
     testTaskSource('json', jsonTestBtn, jsonTestResult);
+  });
+
+  calendarTestBtn.addEventListener('click', function () {
+    calendarTestBtn.disabled = true;
+    var previousText = calendarTestBtn.textContent;
+    calendarTestBtn.textContent = '確認中...';
+
+    fetch('/api/calendar/test', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ reportFilters: getReportFiltersBody() }),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || '取得内容を確認できませんでした');
+          return data;
+        });
+      })
+      .then(function (data) {
+        var included = Array.isArray(data.included) ? data.included : [];
+        var excluded = Array.isArray(data.excluded) ? data.excluded : [];
+        var lines = [];
+        if (data.dateLabel) lines.push(data.dateLabel + ' の予定');
+
+        lines.push('日報に入る予定: ' + included.length + '件');
+        included.forEach(function (item) {
+          var title = typeof item === 'string' ? item : (item && item.title) || '';
+          if (title) lines.push(/^\s*[・•]/.test(title) ? title : '・' + title);
+        });
+
+        lines.push('');
+        lines.push('除外した予定: ' + excluded.length + '件');
+        excluded.forEach(function (item) {
+          var title = typeof item === 'string' ? item : (item && item.title) || '';
+          var reason = item && typeof item === 'object' ? item.reason : '';
+          if (title) lines.push('・' + title + (reason ? '（' + reason + '）' : ''));
+        });
+
+        showTestResult(calendarTestResult, lines.join('\n'), true);
+      })
+      .catch(function (error) {
+        showTestResult(calendarTestResult, error.message, false);
+      })
+      .finally(function () {
+        calendarTestBtn.disabled = false;
+        calendarTestBtn.textContent = previousText;
+      });
   });
 
   notionDisconnectBtn.addEventListener('click', function () {
@@ -463,6 +546,9 @@
   presetInputs.forEach(function (input) { input.addEventListener('change', markDirty); });
   customPrompt.addEventListener('input', markDirty);
   togglToken.addEventListener('input', markDirty);
+  excludeWorkingLocations.addEventListener('change', markDirty);
+  excludeBusyEvents.addEventListener('change', markDirty);
+  excludedTitles.addEventListener('input', markDirty);
   notionEnabled.addEventListener('change', function () { markDirty(); updateTaskStatus(); });
   notionDatabaseUrl.addEventListener('input', markDirty);
   Object.keys(notionMappingFields).forEach(function (key) {
