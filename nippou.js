@@ -7,8 +7,10 @@ const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
 const { DEFAULT_MODEL, generateStructuredReport } = require('./services/ai');
+const { formatCalendarEvents } = require('./services/calendar');
 const { isBusinessDay, nextBusinessDay, formatDateLabel } = require('./services/holidays');
 const { buildSlackMrkdwn } = require('./services/report');
+const { filterReportLines, normalizeReportFilters } = require('./services/report-filters');
 const { postIncomingWebhook } = require('./services/slack');
 const { createPostLedger } = require('./services/post-ledger');
 
@@ -167,7 +169,7 @@ async function getAllTomorrowEvents(accounts, baseDate) {
     return new Date(ta) - new Date(tb);
   });
 
-  const lines = allEvents.map(({ event }) => `・${event.summary || '（タイトルなし）'}`);
+  const lines = formatCalendarEvents(allEvents.map(({ event }) => event));
 
   // 同じ予定を複数の連携アカウントが参照している場合は1件にまとめる。
   return [...new Set(lines)];
@@ -323,11 +325,12 @@ async function main(argv = process.argv.slice(2)) {
   const dateLabel = formatDateLabel(baseDate);
   const tomorrowLabel = formatDateLabel(nextBusinessDay(baseDate));
   console.log(`=== 日報作成（${dateLabel}）===\n`);
+  const reportFilters = normalizeReportFilters();
 
   console.log('Togglからデータ取得中...');
   let togglLines;
   try {
-    togglLines = await getTogglEntries(baseDate);
+    togglLines = filterReportLines(await getTogglEntries(baseDate), reportFilters);
     if (togglLines.length === 0) togglLines = ['・（記録なし）'];
   } catch (error) {
     console.error('Togglエラー:', error.message);
@@ -352,13 +355,17 @@ async function main(argv = process.argv.slice(2)) {
 
   console.log('Claudeで「やったこと」「やること」を生成中...');
   // Claudeの構造化生成に失敗した場合は例外を伝播し、未整形の内容をSlackへ投稿しない。
-  const report = await generateStructuredReport(
+  const generatedReport = await generateStructuredReport(
     loadAiConfig(),
     togglLines,
     calendarLines,
     dateLabel,
     tomorrowLabel,
   );
+  const report = {
+    todayItems: filterReportLines(generatedReport.todayItems, reportFilters),
+    tomorrowItems: filterReportLines(generatedReport.tomorrowItems, reportFilters),
+  };
   const comment = options.comment && options.comment.trim()
     ? options.comment.trim()
     : '（ひとことはSlackで本人が入力）';

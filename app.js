@@ -7,7 +7,12 @@ const { waitUntil } = require('@vercel/functions');
 const { App, ExpressReceiver } = require('@slack/bolt');
 const { WebClient } = require('@slack/web-api');
 const { getTogglEntries } = require('./services/toggl');
-const { generateAuthUrl, exchangeCode, getCalendarEvents } = require('./services/calendar');
+const {
+  generateAuthUrl,
+  exchangeCode,
+  getCalendarEventSelection,
+  getCalendarEvents,
+} = require('./services/calendar');
 const {
   getUserData,
   saveUserData,
@@ -18,6 +23,10 @@ const {
 const { resolveReportSchedule } = require('./services/report-date');
 const { generateStructuredReport, generatePreview } = require('./services/ai');
 const { buildSlackMrkdwn } = require('./services/report');
+const {
+  filterReportLines,
+  normalizeReportFilters,
+} = require('./services/report-filters');
 const {
   DEFAULT_NOTION_MAPPING,
   exchangeNotionCode,
@@ -208,6 +217,19 @@ function stringSetting(value, maxLength = 2000) {
   return value.trim().slice(0, maxLength);
 }
 
+function readReportFilters(userData = {}) {
+  try {
+    return normalizeReportFilters(userData.reportFilters);
+  } catch (error) {
+    console.warn('Stored report filters are invalid; defaults will be used:', error.message);
+    return normalizeReportFilters();
+  }
+}
+
+function withReportFallback(lines, fallback) {
+  return Array.isArray(lines) && lines.length > 0 ? lines : [fallback];
+}
+
 function readTaskSources(userData = {}) {
   const stored = userData.taskSources && typeof userData.taskSources === 'object'
     ? userData.taskSources
@@ -322,6 +344,7 @@ receiver.router.get('/api/settings', authMiddleware, async (req, res) => {
       notionAuthUrl: isNotionConfigured()
         ? generateNotionAuthUrl(generateNotionState(req.slackUserId, req.slackTeamId))
         : '',
+      reportFilters: readReportFilters(data),
       taskSources: publicTaskSources(data),
     });
   } catch (error) {
@@ -332,10 +355,18 @@ receiver.router.get('/api/settings', authMiddleware, async (req, res) => {
 
 receiver.router.put('/api/settings', express.json(), authMiddleware, async (req, res) => {
   try {
-    const { togglToken, ai, taskSources } = req.body;
+    const {
+      togglToken,
+      ai,
+      reportFilters,
+      taskSources,
+    } = req.body;
     const update = {};
     if (togglToken !== undefined) update.togglToken = togglToken;
     if (ai !== undefined) update.ai = ai;
+    if (reportFilters !== undefined) {
+      update.reportFilters = normalizeReportFilters(reportFilters);
+    }
     if (taskSources !== undefined) {
       if (!taskSources || typeof taskSources !== 'object' || Array.isArray(taskSources)) {
         throw new TypeError('Task sources must be an object');
@@ -514,10 +545,77 @@ receiver.router.post(
           },
         },
       );
-      res.json(result);
+      const reportFilters = req.body?.reportFilters === undefined
+        ? readReportFilters(userData)
+        : normalizeReportFilters(req.body.reportFilters);
+      res.json({
+        done: filterReportLines(result.done, reportFilters),
+        will: filterReportLines(result.will, reportFilters),
+      });
     } catch (error) {
       console.error('Task source test error:', error.message);
       res.status(400).json({ error: error.message || '接続を確認できませんでした' });
+    }
+  },
+);
+
+receiver.router.post(
+  '/api/calendar/test',
+  express.json(),
+  authMiddleware,
+  async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const userData = await getUserData(req.slackUserId, req.slackTeamId);
+      const accounts = userData.googleAccounts || [];
+      if (accounts.length === 0) {
+        res.status(400).json({ error: 'Googleカレンダーを先に接続してください' });
+        return;
+      }
+
+      const reportFilters = req.body?.reportFilters === undefined
+        ? readReportFilters(userData)
+        : normalizeReportFilters(req.body.reportFilters);
+      const schedule = resolveReportSchedule('');
+      let saveQueue = Promise.resolve();
+      const selections = await Promise.all(accounts.map(async (account) => (
+        getCalendarEventSelection(
+          account.tokens,
+          schedule.date,
+          async (refreshed) => {
+            account.tokens = refreshed;
+            const save = saveQueue.then(() => saveUserData(
+              req.slackUserId,
+              { googleAccounts: accounts },
+              req.slackTeamId,
+            ));
+            saveQueue = save.catch(() => {});
+            await save;
+          },
+          { reportFilters },
+        )
+      )));
+
+      const included = mergeSourceLines(...selections.map((selection) => selection.included));
+      const excluded = [];
+      const seenExcluded = new Set();
+      for (const selection of selections) {
+        for (const item of selection.excluded) {
+          const key = `${item.title}\0${item.reason}`;
+          if (seenExcluded.has(key)) continue;
+          seenExcluded.add(key);
+          excluded.push(item);
+        }
+      }
+
+      res.json({
+        dateLabel: schedule.nextBusinessDateLabel,
+        included,
+        excluded,
+      });
+    } catch (error) {
+      console.error('Calendar test error:', error.message);
+      res.status(400).json({ error: error.message || 'カレンダーを確認できませんでした' });
     }
   },
 );
@@ -825,6 +923,7 @@ async function handleNippouCommand({ command, client, body, respond }) {
   const tomorrowLabel = reportDate.nextBusinessDateLabel;
   const userData = await getUserData(userId, teamId);
   const targetChannelId = userData.dailyChannelId || command.channel_id;
+  const reportFilters = readReportFilters(userData);
 
   const taskSources = configuredTaskSources(userData);
   const hasConfiguredSource = Boolean(
@@ -869,10 +968,15 @@ async function handleNippouCommand({ command, client, body, respond }) {
     : Promise.resolve([]);
   const calendarPromise = Promise.all(accounts.map(async (account) => {
     try {
-      return await getCalendarEvents(account.tokens, baseDate, async (refreshed) => {
-        account.tokens = refreshed;
-        await persistIntegrationUpdate({ googleAccounts: accounts });
-      });
+      return await getCalendarEvents(
+        account.tokens,
+        baseDate,
+        async (refreshed) => {
+          account.tokens = refreshed;
+          await persistIntegrationUpdate({ googleAccounts: accounts });
+        },
+        { reportFilters },
+      );
     } catch (error) {
       console.error(`Calendar error (${account.email}):`, error.message);
       sourceWarnings.push('Googleカレンダー');
@@ -906,16 +1010,14 @@ async function handleNippouCommand({ command, client, body, respond }) {
     tasksPromise,
   ]);
 
-  let todayLines = mergeSourceLines(
+  let todayLines = withReportFallback(filterReportLines(mergeSourceLines(
     togglLines,
     ...taskGroups.map((result) => result.done),
-  );
-  let tomorrowLines = mergeSourceLines(
+  ), reportFilters), '・（記録なし）');
+  let tomorrowLines = withReportFallback(filterReportLines(mergeSourceLines(
     ...calendarGroups,
     ...taskGroups.map((result) => result.will),
-  );
-  if (todayLines.length === 0) todayLines = ['・（記録なし）'];
-  if (tomorrowLines.length === 0) tomorrowLines = ['・（予定なし）'];
+  ), reportFilters), '・（予定なし）');
 
   // AI generation (if configured and API key available)
   let aiTodayLines = todayLines;
@@ -928,8 +1030,14 @@ async function handleNippouCommand({ command, client, body, respond }) {
       dateLabel,
       tomorrowLabel,
     );
-    aiTodayLines = aiReport.todayItems;
-    aiTomorrowLines = aiReport.tomorrowItems;
+    aiTodayLines = withReportFallback(
+      filterReportLines(aiReport.todayItems, reportFilters),
+      '・（記録なし）',
+    );
+    aiTomorrowLines = withReportFallback(
+      filterReportLines(aiReport.tomorrowItems, reportFilters),
+      '・（予定なし）',
+    );
   } catch (e) {
     console.error('AI generation error:', e.message);
     // Fall back to raw data in the interactive review modal.

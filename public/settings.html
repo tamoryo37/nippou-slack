@@ -141,6 +141,30 @@
             <a id="googleConnectBtn" class="btn btn-outline" href="#">
               <span class="btn-icon">+</span> アカウントを追加
             </a>
+
+            <div class="calendar-filter-settings">
+              <strong class="calendar-filter-title">日報に載せない予定・タスク</strong>
+              <label class="filter-check-label">
+                <input type="checkbox" id="excludeWorkingLocations">
+                「自宅」「オフィス」などの勤務場所を除外
+              </label>
+              <label class="filter-check-label">
+                <input type="checkbox" id="excludeBusyEvents">
+                「Busy」を除外
+              </label>
+
+              <label class="field-label" for="excludedTitles">追加で除外する予定・タスク名</label>
+              <textarea id="excludedTitles" class="textarea textarea-compact"
+                placeholder="例:&#10;朝タスク&#10;毎日のルーティン"></textarea>
+              <p class="hint">
+                1行に1つ入力してください。名前が完全に一致する項目を、カレンダー・Toggl・タスク管理から除外します。
+              </p>
+
+              <button type="button" class="btn btn-outline" id="calendarTestBtn">
+                翌営業日の取得内容をテスト
+              </button>
+              <div class="connection-test hidden" id="calendarTestResult" aria-live="polite"></div>
+            </div>
           </div>
         </div>
 

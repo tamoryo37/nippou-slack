@@ -4,6 +4,11 @@ const {
   dateKeyToStartOfDay,
   nextBusinessDateKey,
 } = require('./holidays');
+const {
+  isReportTitleExcluded,
+  normalizeReportFilters,
+  normalizeTitleKey,
+} = require('./report-filters');
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
@@ -38,6 +43,11 @@ async function exchangeCode(code) {
 }
 
 async function getCalendarEvents(tokens, baseDate, onTokenRefresh, options = {}) {
+  const selection = await getCalendarEventSelection(tokens, baseDate, onTokenRefresh, options);
+  return selection.included;
+}
+
+async function getCalendarEventSelection(tokens, baseDate, onTokenRefresh, options = {}) {
   const oauth2Client = options.oauth2Client || createOAuth2Client();
   oauth2Client.setCredentials(tokens);
 
@@ -69,17 +79,63 @@ async function getCalendarEvents(tokens, baseDate, onTokenRefresh, options = {})
     await onTokenRefresh(refreshedTokens);
   }
 
-  return formatCalendarEvents(response.data.items || []);
+  return selectCalendarEvents(response.data.items || [], options.reportFilters);
 }
 
-function formatCalendarEvents(events) {
-  return events.map((event) => `・${event.summary || '（タイトルなし）'}`);
+function calendarEventExclusionReason(event, reportFilters) {
+  const filters = normalizeReportFilters(reportFilters);
+  const title = event?.summary || '（タイトルなし）';
+
+  if (
+    filters.excludeWorkingLocations
+    && (
+      event?.eventType === 'workingLocation'
+      || event?.event_type === 'workingLocation'
+      || event?.workingLocationProperties != null
+    )
+  ) {
+    return '勤務場所';
+  }
+
+  if (filters.excludeBusyEvents && normalizeTitleKey(title) === 'busy') {
+    return 'ブロック予定';
+  }
+
+  if (isReportTitleExcluded(title, filters)) {
+    return '除外タイトル';
+  }
+
+  return null;
+}
+
+function selectCalendarEvents(events, reportFilters) {
+  const filters = normalizeReportFilters(reportFilters);
+  const selection = { included: [], excluded: [] };
+
+  for (const event of Array.isArray(events) ? events : []) {
+    const title = event?.summary || '（タイトルなし）';
+    const reason = calendarEventExclusionReason(event, filters);
+    if (reason) {
+      selection.excluded.push({ title, reason });
+    } else {
+      selection.included.push(`・${title}`);
+    }
+  }
+
+  return selection;
+}
+
+function formatCalendarEvents(events, reportFilters) {
+  return selectCalendarEvents(events, reportFilters).included;
 }
 
 module.exports = {
+  calendarEventExclusionReason,
   createOAuth2Client,
-  generateAuthUrl,
   exchangeCode,
   formatCalendarEvents,
+  generateAuthUrl,
+  getCalendarEventSelection,
   getCalendarEvents,
+  selectCalendarEvents,
 };
