@@ -24,7 +24,29 @@ async function getTogglEntries(apiToken, baseDate) {
 }
 
 function formatTogglEntries(entries) {
-  const descriptions = entries.map((entry) => entry.description || '(タイトルなし)');
+  // `/me/time_entries` is a latest-entries endpoint and must not be treated as
+  // chronological. Sort a copy by the
+  // actual start timestamp before dropping time metadata so the report reads
+  // in the order the work happened. Entries without a usable timestamp stay
+  // after timed entries and keep their original relative order.
+  const descriptions = entries
+    .map((entry, index) => {
+      const startTime = Date.parse(entry && entry.start);
+      return {
+        entry,
+        index,
+        startTime: Number.isFinite(startTime) ? startTime : null,
+      };
+    })
+    .sort((left, right) => {
+      if (left.startTime === null && right.startTime === null) {
+        return left.index - right.index;
+      }
+      if (left.startTime === null) return 1;
+      if (right.startTime === null) return -1;
+      return left.startTime - right.startTime || left.index - right.index;
+    })
+    .map(({ entry }) => (entry && entry.description) || '(タイトルなし)');
   return [...new Set(descriptions)].map((description) => `・${description}`);
 }
 

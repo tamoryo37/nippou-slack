@@ -11,6 +11,7 @@ const { formatCalendarEvents } = require('./services/calendar');
 const { isBusinessDay, nextBusinessDay, formatDateLabel } = require('./services/holidays');
 const { buildSlackMrkdwn } = require('./services/report');
 const { filterReportLines, normalizeReportFilters } = require('./services/report-filters');
+const { formatTogglEntries } = require('./services/toggl');
 const { postIncomingWebhook } = require('./services/slack');
 const { createPostLedger } = require('./services/post-ledger');
 
@@ -39,8 +40,7 @@ async function getTogglEntries(baseDate) {
   if (!response.ok) throw new Error(`Toggl API error: ${response.status}`);
 
   const entries = await response.json();
-  const descriptions = entries.map((entry) => entry.description || '(タイトルなし)');
-  return [...new Set(descriptions)].map((description) => `・${description}`);
+  return formatTogglEntries(entries);
 }
 
 // --- Google OAuth ---
