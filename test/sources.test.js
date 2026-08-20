@@ -24,6 +24,49 @@ test('Toggl output keeps task names, removes durations, and deduplicates names',
   ]);
 });
 
+test('Toggl output is chronological even when the API returns latest entries first', () => {
+  assert.deepEqual(formatTogglEntries([
+    { description: '夕方の確認', start: '2026-08-21T08:00:00Z' },
+    { description: '朝の提案書', start: '2026-08-20T23:30:00Z' },
+    { description: '昼の商談', start: '2026-08-21T03:00:00Z' },
+    { description: '朝の提案書', start: '2026-08-21T01:00:00Z' },
+  ]), [
+    '・朝の提案書',
+    '・昼の商談',
+    '・夕方の確認',
+  ]);
+});
+
+test('Toggl entries without valid start times remain last in their source order', () => {
+  assert.deepEqual(formatTogglEntries([
+    { description: '時刻なし1' },
+    { description: '午後', start: '2026-08-21T06:00:00Z' },
+    { description: '時刻なし2', start: 'invalid' },
+    { description: '午前', start: '2026-08-21T00:00:00Z' },
+  ]), [
+    '・午前',
+    '・午後',
+    '・時刻なし1',
+    '・時刻なし2',
+  ]);
+});
+
+test('Toggl chronological formatting is stable and does not mutate the API response', () => {
+  const entries = [
+    { description: '同時刻1', start: '2026-08-21T01:00:00Z' },
+    { description: '朝一番', start: '2026-08-21T00:00:00Z' },
+    { description: '同時刻2', start: '2026-08-21T01:00:00Z' },
+  ];
+  const original = structuredClone(entries);
+
+  assert.deepEqual(formatTogglEntries(entries), [
+    '・朝一番',
+    '・同時刻1',
+    '・同時刻2',
+  ]);
+  assert.deepEqual(entries, original);
+});
+
 test('Calendar output keeps event names without start times or all-day labels', () => {
   assert.deepEqual(formatCalendarEvents([
     { summary: '顧客定例', start: { dateTime: '2026-07-21T10:00:00+09:00' } },
@@ -75,19 +118,27 @@ test('Calendar exclusion settings can be disabled explicitly', () => {
   ]);
 });
 
-test('Toggl requests the explicitly selected Tokyo calendar date', async (t) => {
+test('Toggl requests the selected Tokyo date and returns its entries chronologically', async (t) => {
   const originalFetch = global.fetch;
   let requestedUrl;
   global.fetch = async (url) => {
     requestedUrl = String(url);
-    return { ok: true, async json() { return [{ description: '過去日の作業' }]; } };
+    return {
+      ok: true,
+      async json() {
+        return [
+          { description: '午後の作業', start: '2026-07-17T06:00:00Z' },
+          { description: '午前の作業', start: '2026-07-17T00:00:00Z' },
+        ];
+      },
+    };
   };
   t.after(() => {
     global.fetch = originalFetch;
   });
 
   const result = await getTogglEntries('test-token', new Date('2026-07-17T12:00:00+09:00'));
-  assert.deepEqual(result, ['・過去日の作業']);
+  assert.deepEqual(result, ['・午前の作業', '・午後の作業']);
   assert.match(requestedUrl, /start_date=2026-07-16T15:00:00\.000Z/);
   assert.match(requestedUrl, /end_date=2026-07-17T14:59:59\.999Z/);
 });
